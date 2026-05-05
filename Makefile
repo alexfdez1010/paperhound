@@ -4,7 +4,8 @@ help:
 	@echo "Targets:"
 	@echo "  install            Sync dev dependencies (creates .venv)"
 	@echo "  test               Run unit tests"
-	@echo "  test-integration   Run live network integration tests (PAPERHOUND_RUN_INTEGRATION=1)"
+	@echo "  test-integration   Run live network integration tests (always live)"
+	@echo "  test-all           Run unit + integration tests"
 	@echo "  lint               ruff check"
 	@echo "  format             ruff format (auto-fix)"
 	@echo "  check              lint + format check + unit tests"
@@ -18,7 +19,10 @@ test test-unit:
 	uv run pytest tests/unit
 
 test-integration:
-	PAPERHOUND_RUN_INTEGRATION=1 uv run pytest tests/integration
+	uv run pytest tests/integration
+
+test-all:
+	uv run pytest tests/unit tests/integration
 
 lint:
 	uv run ruff check

@@ -91,3 +91,44 @@ def test_api_key_sent_when_provided() -> None:
     with SemanticScholarProvider(api_key="secret") as provider:
         provider.search(SearchQuery(text="x", limit=1))
     assert route.calls[0].request.headers["x-api-key"] == "secret"
+
+
+@respx.mock
+def test_search_raises_clear_error_on_403() -> None:
+    respx.get(f"{S2_BASE_URL}/paper/search").mock(return_value=httpx.Response(403))
+    with SemanticScholarProvider(max_retries=0) as provider:
+        with pytest.raises(ProviderError) as info:
+            provider.search(SearchQuery(text="x", limit=1))
+    msg = str(info.value)
+    assert "403" in msg
+    assert "SEMANTIC_SCHOLAR_API_KEY" in msg
+
+
+@respx.mock
+def test_search_retries_on_429_then_succeeds() -> None:
+    sleeps: list[float] = []
+    route = respx.get(f"{S2_BASE_URL}/paper/search").mock(
+        side_effect=[
+            httpx.Response(429, headers={"Retry-After": "0"}),
+            httpx.Response(429, headers={"Retry-After": "0"}),
+            httpx.Response(200, json={"data": [_sample_payload()]}),
+        ]
+    )
+    with SemanticScholarProvider(
+        max_retries=3, retry_base_delay=0.0, sleep=sleeps.append
+    ) as provider:
+        results = provider.search(SearchQuery(text="x", limit=1))
+    assert route.call_count == 3
+    assert len(results) == 1
+    assert len(sleeps) == 2
+
+
+@respx.mock
+def test_search_raises_rate_limit_after_retries_exhausted() -> None:
+    respx.get(f"{S2_BASE_URL}/paper/search").mock(
+        return_value=httpx.Response(429, headers={"Retry-After": "0"})
+    )
+    with SemanticScholarProvider(max_retries=2, retry_base_delay=0.0, sleep=lambda _: None) as p:
+        with pytest.raises(ProviderError) as info:
+            p.search(SearchQuery(text="x", limit=1))
+    assert "rate-limited" in str(info.value)

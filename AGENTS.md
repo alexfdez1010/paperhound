@@ -38,7 +38,7 @@ src/paperhound/
     aggregator.py
 
 tests/unit/           # fast, network-free; HTTP mocked with respx
-tests/integration/    # live API tests; gated by PAPERHOUND_RUN_INTEGRATION=1
+tests/integration/    # live API tests; always hit real arXiv / S2
 skills/paperhound/    # SKILL.md for agents driving the CLI
 .github/workflows/    # ci.yml + publish.yml (PyPI trusted publishing)
 ```
@@ -65,9 +65,10 @@ Common tasks: `make install`, `make test`, `make check`, `make build`.
 4. **Keep heavy deps lazy.** `docling` is imported inside
    `convert._build_default_converter` so importing the CLI is fast and tests
    that don't need docling don't pay for it.
-5. **Network tests are gated.** Only `tests/unit/*` runs by default. Live tests
-   live under `tests/integration/` with `pytest.mark.integration` and a
-   `PAPERHOUND_RUN_INTEGRATION=1` skip-guard.
+5. **Integration tests are real.** `tests/unit/*` mocks HTTP with `respx`.
+   `tests/integration/*` always hits the live arXiv / Semantic Scholar APIs —
+   no env-var gate, no mocks. S2 endpoints are reachable anonymously; the
+   provider retries 429s automatically.
 6. **English only** in code, comments, docstrings, and tests.
 
 ## When adding features

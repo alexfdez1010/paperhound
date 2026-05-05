@@ -1,9 +1,5 @@
 # paperhound
 
-[![PyPI](https://img.shields.io/pypi/v/paperhound.svg)](https://pypi.org/project/paperhound/)
-[![Python versions](https://img.shields.io/pypi/pyversions/paperhound.svg)](https://pypi.org/project/paperhound/)
-[![License](https://img.shields.io/pypi/l/paperhound.svg)](LICENSE)
-
 > **paperhound** — sniff out academic papers from the command line.
 
 A small, fast CLI for AI/ML researchers who want a single tool to **search**,
@@ -96,29 +92,43 @@ paperhound accepts whatever you have on hand:
 
 | Env var | Purpose |
 |---|---|
-| `SEMANTIC_SCHOLAR_API_KEY` | Optional. Lifts the public rate limit for the Semantic Scholar Graph API. |
-| `PAPERHOUND_RUN_INTEGRATION` | Set to `1` to run live integration tests. |
+| `SEMANTIC_SCHOLAR_API_KEY` | Optional. Every Semantic Scholar Graph API endpoint we use (`/paper/search`, `/paper/{paper_id}`) is reachable anonymously, but the unauthenticated quota is shared globally and 429s are common; the provider retries them automatically. Set this to your own key for steadier throughput. |
 
 ## Use it from agents
 
-paperhound is designed to be driven by AI agents. The repo includes a ready-to-install
+paperhound is designed to be driven by AI agents. The repo ships a ready-to-install
 [skill at `skills/paperhound/SKILL.md`](skills/paperhound/SKILL.md) that documents
 every command, recommends the JSON output flag, and gives an end-to-end example.
-Drop the skill into your agent's skill directory (e.g. `~/.claude/skills/`) and
-the agent will know how to search papers, fetch abstracts, and produce Markdown.
+
+Install it into Claude Code (or any [skills.sh](https://skills.sh)-compatible
+agent) with one command:
+
+```bash
+npx skills add alexfdez1010/paperhound
+```
+
+This uses the [`skills` CLI](https://github.com/vercel-labs/skills) to discover
+the `SKILL.md` under `skills/paperhound/` and place it in your agent's skill
+directory (`~/.claude/skills/paperhound/` for Claude Code). Pass
+`-a <agent>` to target a specific agent (e.g. `-a claude-code`,
+`-a opencode`).
 
 ## Development
 
 ```bash
 make install            # uv sync --extra dev
-make test               # unit tests
-make test-integration   # live API tests (PAPERHOUND_RUN_INTEGRATION=1)
-make check              # lint + format check + tests (run before pushing)
+make test               # unit tests (network-free, respx-mocked)
+make test-integration   # live API tests — always live, no env-var gate
+make test-all           # unit + integration
+make check              # lint + format check + unit tests (run before pushing)
 ```
 
-The test suite uses `respx` to record/replay HTTP, so unit tests do not touch
-the network. Provider clients are dependency-injected, which makes the
-aggregator and CLI fully unit-testable.
+Unit tests use `respx` to mock HTTP, so they never touch the network.
+Integration tests under `tests/integration/` always hit the real arXiv and
+Semantic Scholar APIs — no env-var gate, no mocks. The `SemanticScholarProvider`
+retries 429s with exponential backoff so the S2 suite is robust to the public
+shared rate limit; export `SEMANTIC_SCHOLAR_API_KEY` only if you want faster
+runs.
 
 ## Releasing to PyPI
 

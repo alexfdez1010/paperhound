@@ -24,6 +24,18 @@ If the command is missing, install it:
 pip install paperhound        # or: uv tool install paperhound
 ```
 
+## Installing this skill
+
+Use the [skills.sh](https://skills.sh) CLI:
+
+```bash
+npx skills add alexfdez1010/paperhound
+```
+
+It picks up this `SKILL.md` (frontmatter `name` + `description`) and installs
+it under `~/.claude/skills/paperhound/`. Add `-a claude-code` to target a
+specific agent, or `-y` to skip prompts.
+
 ## When to use this skill
 
 Trigger this skill when the user asks for any of:
