@@ -1,24 +1,39 @@
-main:
-	@echo "Running main..."
-	uv run src/python-template/main.py
+.PHONY: help install test test-unit test-integration lint format check build clean
 
-test: test-unit test-integration
-	@echo "All tests completed successfully"
+help:
+	@echo "Targets:"
+	@echo "  install            Sync dev dependencies (creates .venv)"
+	@echo "  test               Run unit tests"
+	@echo "  test-integration   Run live network integration tests (PAPERHOUND_RUN_INTEGRATION=1)"
+	@echo "  lint               ruff check"
+	@echo "  format             ruff format (auto-fix)"
+	@echo "  check              lint + format check + unit tests"
+	@echo "  build              Build sdist + wheel into dist/"
+	@echo "  clean              Remove build/cache artifacts"
 
-pre-commit: test-unit format lint
+install:
+	uv sync --extra dev
 
-test-unit:
-	@echo "Running unit tests..."
-	uv run pytest -s tests/unit
+test test-unit:
+	uv run pytest tests/unit
 
 test-integration:
-	@echo "Running integration tests..."
-	uv run pytest -s tests/integration
-
-format:
-	@echo "Formatting code..."
-	uv run ruff format
+	PAPERHOUND_RUN_INTEGRATION=1 uv run pytest tests/integration
 
 lint:
-	@echo "Running linter..."
 	uv run ruff check
+
+format:
+	uv run ruff format
+
+check:
+	uv run ruff check
+	uv run ruff format --check
+	uv run pytest tests/unit
+
+build:
+	uv build
+
+clean:
+	rm -rf dist/ build/ *.egg-info .pytest_cache .ruff_cache .coverage htmlcov
+	find . -type d -name __pycache__ -prune -exec rm -rf {} +

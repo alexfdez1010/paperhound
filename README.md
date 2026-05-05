@@ -1,241 +1,133 @@
-# Python Template
+# paperhound
 
-A modern Python project template using [uv](https://docs.astral.sh/uv/) for fast dependency management, pytest for testing, and Ruff for code quality. It includes a `AGENTS.md` file with AI Agent coding assistant guidelines to develop quality code.
+[![PyPI](https://img.shields.io/pypi/v/paperhound.svg)](https://pypi.org/project/paperhound/)
+[![Python versions](https://img.shields.io/pypi/pyversions/paperhound.svg)](https://pypi.org/project/paperhound/)
+[![License](https://img.shields.io/pypi/l/paperhound.svg)](LICENSE)
 
-## 🚀 Features
+> **paperhound** — sniff out academic papers from the command line.
 
-- **Fast Package Management**: Uses `uv` for lightning-fast dependency resolution and installation
-- **Modern Python**: Python 3.12+ with type hints support
-- **Testing Ready**: Pre-configured pytest with unit and integration test structure
-- **Code Quality**: Ruff for formatting and linting
-- **Type Checking**: Optional basedpyright configuration
-- **Development Automation**: Makefile with common development tasks
+A small, fast CLI for AI/ML researchers who want a single tool to **search**,
+**inspect**, **download**, and **convert to Markdown** papers from arXiv and
+Semantic Scholar. Conversion is powered by [docling](https://github.com/docling-project/docling),
+so the resulting Markdown is good enough to feed straight into an LLM context.
 
-## 📋 Requirements
+## Features
 
-- Python 3.12+
-- [uv](https://docs.astral.sh/uv/) package manager
+- 🔎 **Unified search** — one query, all backends. arXiv and Semantic Scholar
+  are queried in parallel and the results are merged and deduplicated.
+- 📄 **Inspect before downloading** — `paperhound show <id>` prints the
+  abstract and metadata so you can decide if it's worth a download.
+- ⬇️ **Download by identifier** — arXiv id, DOI, Semantic Scholar paper id, or
+  any paper URL. Open-access PDFs are resolved automatically.
+- 📝 **PDF → Markdown via docling** — `paperhound convert paper.pdf` or
+  `paperhound get <id>` for the full pipeline.
+- 🤖 **Agent-ready** — ships with a `SKILL.md` and JSON output mode so any
+  Claude / OpenAI / local agent can drive the CLI.
+- 🧪 **Heavily tested** — every module has unit tests; live integration tests
+  are gated behind an environment variable.
 
-## 🛠️ Installation
-
-### Install uv (if not already installed)
-
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-### Clone and Setup
-
-```bash
-# Clone the repository
-git clone https://github.com/alexfdez1010/python-template
-cd python-template
-
-# Sync dependencies (creates .venv and installs packages)
-uv sync
-```
-
-## 🎯 Usage
-
-### Running the Application
+## Installation
 
 ```bash
-# Using Makefile
-make main
-
-# Or directly with uv
-uv run src/python-template/main.py
-
-# Or with Python module syntax
-uv run python -m python-template.main
+pip install paperhound
 ```
 
-### Development Commands
-
-The project includes a `Makefile` with convenient shortcuts:
+or with [uv](https://docs.astral.sh/uv/):
 
 ```bash
-make main              # Run the main application
-make test              # Run all tests (unit + integration)
-make test-unit         # Run unit tests only
-make test-integration  # Run integration tests only
-make format            # Format code with Ruff
-make lint              # Lint code with Ruff
-make pre-commit        # Run pre-commit checks (unit tests + format + lint)
+uv tool install paperhound
 ```
 
-## 🧪 Testing
+Python 3.10+ is required. Docling pulls in PyTorch on first run, so the very
+first conversion may take a moment to download model weights.
 
-The project uses pytest with a clear separation between unit and integration tests:
-
-- **Unit Tests** (`tests/unit/`): Fast, isolated tests using mocks
-- **Integration Tests** (`tests/integration/`): Tests with real APIs/services
-
-### Running Tests
+## Quick start
 
 ```bash
-# All tests
-make test
-# or
-uv run pytest
+# Search across all providers
+paperhound search "diffusion transformers" --limit 5
 
-# Unit tests only
-make test-unit
-# or
-uv run pytest tests/unit
+# Show the abstract for a specific paper
+paperhound show 2401.12345
+paperhound show 10.1038/s41586-020-2649-2          # DOI works too
+paperhound show https://arxiv.org/abs/1706.03762   # ...and URLs
 
-# Integration tests only
-make test-integration
-# or
-uv run pytest tests/integration
+# Download the PDF
+paperhound download 1706.03762 -o ./papers/
 
-# With verbose output
-uv run pytest -v
+# Convert a local PDF to Markdown
+paperhound convert ./papers/1706.03762.pdf -o attention.md
 
-# With coverage
-uv run pytest --cov=src/python-template
+# Or do it all at once: search-resolve, download, convert, clean up
+paperhound get 1706.03762 -o attention.md
 ```
 
-## 📦 Dependency Management
-
-### Adding Dependencies
+### JSON output for scripts and agents
 
 ```bash
-# Add runtime dependency
-uv add <package-name>
-
-# Add development dependency
-uv add --dev <package-name>
-
-# Example: Add requests library
-uv add requests
-
-# Example: Add pytest plugin
-uv add --dev pytest-cov
+paperhound search "graph neural networks" --json | jq '.[].title'
+paperhound show 1706.03762 --json
 ```
 
-### Updating Dependencies
+## Commands
+
+| Command | Description |
+|---|---|
+| `paperhound search <query>` | Run a unified search. `--limit`, `--source arxiv\|semantic_scholar`, `--year-min`, `--year-max`, `--json`. |
+| `paperhound show <id>` | Fetch a paper's metadata + abstract. |
+| `paperhound download <id> -o <path>` | Download a paper PDF. |
+| `paperhound convert <pdf> -o <md>` | Convert a PDF (or any docling-supported file/URL) to Markdown. |
+| `paperhound get <id> -o <md>` | Download + convert in one step. `--keep-pdf` to keep the PDF. |
+| `paperhound version` | Print the installed version. |
+
+Run `paperhound <command> --help` for full options.
+
+## Identifier formats
+
+paperhound accepts whatever you have on hand:
+
+- arXiv ids: `2401.12345`, `2401.12345v3`, `cs.AI/0301001`, `arXiv:2401.12345`
+- DOIs: `10.1038/s41586-020-2649-2`, `doi:10.1038/...`
+- Semantic Scholar paper ids: 40-char hex
+- URLs: `arxiv.org/abs/...`, `arxiv.org/pdf/...`, `doi.org/...`,
+  `semanticscholar.org/paper/...`
+
+## Configuration
+
+| Env var | Purpose |
+|---|---|
+| `SEMANTIC_SCHOLAR_API_KEY` | Optional. Lifts the public rate limit for the Semantic Scholar Graph API. |
+| `PAPERHOUND_RUN_INTEGRATION` | Set to `1` to run live integration tests. |
+
+## Use it from agents
+
+paperhound is designed to be driven by AI agents. The repo includes a ready-to-install
+[skill at `skills/paperhound/SKILL.md`](skills/paperhound/SKILL.md) that documents
+every command, recommends the JSON output flag, and gives an end-to-end example.
+Drop the skill into your agent's skill directory (e.g. `~/.claude/skills/`) and
+the agent will know how to search papers, fetch abstracts, and produce Markdown.
+
+## Development
 
 ```bash
-# Update a specific package
-uv lock --upgrade-package <package-name>
-
-# Update all packages
-uv lock --upgrade
-
-# Sync after updating
-uv sync
+make install            # uv sync --extra dev
+make test               # unit tests
+make test-integration   # live API tests (PAPERHOUND_RUN_INTEGRATION=1)
+make check              # lint + format check + tests (run before pushing)
 ```
 
-### Removing Dependencies
+The test suite uses `respx` to record/replay HTTP, so unit tests do not touch
+the network. Provider clients are dependency-injected, which makes the
+aggregator and CLI fully unit-testable.
 
-```bash
-uv remove <package-name>
-```
+## Releasing to PyPI
 
-## 🎨 Code Quality
+1. Bump `version` in `pyproject.toml` and `paperhound/__init__.py`.
+2. Tag the release: `git tag v0.1.1 && git push --tags`.
+3. The `Publish to PyPI` GitHub Action builds and publishes via
+   [PyPI Trusted Publishing](https://docs.pypi.org/trusted-publishers/) — no
+   API token required, just configure the trusted publisher once on PyPI.
 
-### Formatting
+## License
 
-```bash
-# Auto-format all code
-make format
-# or
-uv run ruff format
-
-# Check formatting without changes
-uv run ruff format --check
-```
-
-### Linting
-
-```bash
-# Run linter
-make lint
-# or
-uv run ruff check
-
-# Auto-fix issues where possible
-uv run ruff check --fix
-```
-
-### Pre-commit Checks
-
-Before committing code, run:
-
-```bash
-make pre-commit
-```
-
-This runs unit tests, formatting, and linting to ensure code quality.
-
-## 📁 Project Structure
-
-```
-.
-├── src/
-│   └── python-template/          # Main package source code
-│       ├── __init__.py
-│       └── main.py               # CLI entry point
-├── tests/
-│   ├── unit/                     # Unit tests with mocks
-│   └── integration/              # Integration tests (real APIs/services)
-├── .python-version               # Python version (3.12)
-├── pyproject.toml                # Project metadata & dependencies
-├── uv.lock                       # Locked dependencies (DO NOT edit manually)
-├── Makefile                      # Development task automation
-├── .gitignore                    # Git ignore patterns
-├── AGENTS.md                     # AI coding assistant guidelines
-└── README.md                     # This file
-```
-
-## 🔧 Configuration
-
-### pyproject.toml
-
-The `pyproject.toml` file contains:
-- Project metadata (name, version, description)
-- Python version requirement (>=3.12)
-- Dependencies list
-- Build system configuration (Hatchling)
-- Tool configurations (pytest, basedpyright)
-
-### Environment Variables
-
-For sensitive configuration, create a `.env` file (already in `.gitignore`):
-
-```bash
-# .env
-API_KEY=your-secret-key
-DATABASE_URL=postgresql://localhost/db
-```
-
-Load with `python-dotenv` (already included):
-
-```python
-from dotenv import load_dotenv
-import os
-
-load_dotenv()
-api_key = os.getenv("API_KEY")
-```
-
-## 🚀 Development Workflow
-
-1. **Make changes** to code in `src/python-template/`
-2. **Write tests** in `tests/unit/` or `tests/integration/`
-3. **Run tests**: `make test`
-4. **Format code**: `make format`
-5. **Lint code**: `make lint`
-6. **Run pre-commit checks**: `make pre-commit`
-7. **Commit** your changes
-
-## 👥 Authors
-
-Alejandro Fernández Camello & Claude Sonnet 4.5
-
-## 🙏 Acknowledgments
-
-- Built with [uv](https://docs.astral.sh/uv/) for fast Python package management
-- Code quality powered by [Ruff](https://github.com/astral-sh/ruff)
-- Testing with [pytest](https://pytest.org/)
+MIT — see [LICENSE](LICENSE).
