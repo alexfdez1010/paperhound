@@ -101,7 +101,9 @@ paperhound search "<query>" [--limit N] [--year-min YYYY] [--year-max YYYY] [--s
   `-s core` to opt into Semantic Scholar or CORE.
 - `--timeout` defaults to 10s. Providers that exceed the budget are dropped
   from the response — the command still succeeds with whatever returned.
-- JSON output is a list of objects with: `title`, `authors[]`, `abstract`,
+- `--json` emits **JSONL** (one compact JSON object per line, no indent).
+  Parse each line individually with `json.loads(line)` or pipe to `jq '.title'`.
+- JSON schema (`paperhound.models.Paper`): `title`, `authors[]`, `abstract`,
   `year`, `venue`, `url`, `pdf_url`, `citation_count`,
   `identifiers.{arxiv_id,doi,semantic_scholar_id,openalex_id,dblp_key,core_id}`,
   `sources[]`.
@@ -114,6 +116,8 @@ paperhound show <identifier> [--json] [--format markdown|bibtex|ris|csljson]
 
 - `<identifier>` accepts: arXiv id (`2401.12345`, `cs.AI/0301001`),
   DOI (`10.1234/foo.bar`), Semantic Scholar id (40-char hex), or any paper URL.
+- `--json` emits a **single compact JSON object** (one line, `paperhound.models.Paper`
+  schema). Mutually exclusive with `--format` — use one or the other.
 - `--format` controls the output format (default `markdown`):
   - `markdown` — rich terminal view (title, authors, abstract, identifiers).
   - `bibtex` — `@article`/`@inproceedings`/`@misc` entry; cite key is

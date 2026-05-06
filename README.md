@@ -73,17 +73,29 @@ paperhound get 1706.03762 -o attention.md
 
 ### JSON output for scripts and agents
 
+`--json` is the pipe-friendly mode: no headers, no Rich formatting, no progress bars.
+
 ```bash
-paperhound search "graph neural networks" --json | jq '.[].title'
-paperhound show 1706.03762 --json
+# search --json: JSONL — one compact JSON object per line (Paper schema)
+paperhound search "graph neural networks" --json | jq '.title'
+
+# show --json: single compact JSON object on one line
+paperhound show 1706.03762 --json | jq .abstract
 ```
+
+The schema is `paperhound.models.Paper` serialised via `model_dump(mode="json")`.
+Fields: `title`, `authors[]`, `abstract`, `year`, `venue`, `url`, `pdf_url`,
+`citation_count`, `identifiers.{arxiv_id,doi,semantic_scholar_id,openalex_id,
+dblp_key,core_id}`, `sources[]`.
+
+`--json` and `--format` are mutually exclusive on `show` — use one or the other.
 
 ## Commands
 
 | Command | Description |
 |---|---|
-| `paperhound search <query>` | Run a unified search. `--limit`, `--source arxiv\|openalex\|dblp\|crossref\|huggingface\|semantic_scholar\|core` (repeatable), `--year-min`, `--year-max`, `--timeout`, `--json`. |
-| `paperhound show <id>` | Fetch a paper's metadata + abstract. `--format markdown\|bibtex\|ris\|csljson` (default `markdown`). |
+| `paperhound search <query>` | Run a unified search. `--limit`, `--source arxiv\|openalex\|dblp\|crossref\|huggingface\|semantic_scholar\|core` (repeatable), `--year-min`, `--year-max`, `--timeout`, `--json` (JSONL output). |
+| `paperhound show <id>` | Fetch a paper's metadata + abstract. `--format markdown\|bibtex\|ris\|csljson` (default `markdown`), `--json` (compact JSON; mutually exclusive with `--format`). |
 | `paperhound download <id> -o <path>` | Download a paper PDF. |
 | `paperhound convert <pdf> -o <md>` | Convert a PDF (or any docling-supported file/URL) to Markdown. |
 | `paperhound get <id> -o <md>` | Download + convert in one step. `--keep-pdf` to keep the PDF. |

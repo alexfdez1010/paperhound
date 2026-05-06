@@ -18,7 +18,13 @@ from paperhound.download import download_pdf, resolve_pdf_url
 from paperhound.errors import LibraryError, PaperhoundError
 from paperhound.identifiers import IdentifierKind, detect
 from paperhound.library import Library, _canonical_id, _library_dir, _safe_filename
-from paperhound.output import papers_to_json, render_paper_detail, render_table
+from paperhound.output import (
+    paper_to_json_line,
+    papers_to_json,
+    papers_to_jsonl,
+    render_paper_detail,
+    render_table,
+)
 from paperhound.search import (
     DEFAULT_TIMEOUT,
     SearchAggregator,
@@ -103,7 +109,9 @@ HELP_EPILOG = (
     "\n"
     "\b\n"
     '  paperhound search "retrieval augmented generation" -n 5\n'
+    '  paperhound search "llm agents" --json | jq .title\n'
     "  paperhound show 2401.12345\n"
+    "  paperhound show 2401.12345 --json\n"
     "  paperhound show 2401.12345 --format bibtex\n"
     "  paperhound show 2401.12345 --format ris\n"
     "  paperhound show 2401.12345 --format csljson\n"
@@ -126,6 +134,9 @@ HELP_EPILOG = (
     "             results returned on timeout).\n"
     "Identifiers: arXiv id (2401.12345), DOI, Semantic Scholar id, or paper URL.\n"
     "Library:     ~/.paperhound/library/ (override: PAPERHOUND_LIBRARY_DIR).\n"
+    "JSON output: search --json emits JSONL (one Paper object per line);\n"
+    "             show --json emits a single compact JSON object.\n"
+    "             Schema: paperhound.models.Paper (model_dump mode='json').\n"
     "MCP server:  paperhound mcp  (requires: pip install 'paperhound[mcp]').\n"
     "Docs:        https://github.com/alexfdez1010/paperhound"
 )
@@ -272,7 +283,9 @@ def search(
         raise typer.Exit(code=0)
 
     if json_output:
-        sys.stdout.write(papers_to_json(papers) + "\n")
+        jsonl = papers_to_jsonl(papers)
+        if jsonl:
+            sys.stdout.write(jsonl + "\n")
     else:
         render_table(papers, console)
 
@@ -289,7 +302,9 @@ def search(
 )
 def show(
     identifier: str = typer.Argument(..., help="arXiv id, DOI, Semantic Scholar id, or paper URL."),
-    json_output: bool = typer.Option(False, "--json", help="Emit JSON instead of formatted text."),
+    json_output: bool = typer.Option(
+        False, "--json", help="Emit a single compact JSON object. Overrides --format."
+    ),
     fmt: str = typer.Option(
         "markdown",
         "--format",
@@ -304,6 +319,12 @@ def show(
             f"Invalid format {fmt!r}. Choose from: {', '.join(_VALID_FORMATS)}."
         )
 
+    if json_output and fmt != "markdown":
+        raise typer.BadParameter(
+            "--json and --format are mutually exclusive. Use --json for the Paper schema"
+            " (paperhound internal) or --format for citation export formats; not both."
+        )
+
     aggregator = _build_aggregator()
     try:
         paper = aggregator.get(identifier)
@@ -316,7 +337,7 @@ def show(
         raise typer.Exit(code=1)
 
     if json_output:
-        sys.stdout.write(paper.model_dump_json(indent=2) + "\n")
+        sys.stdout.write(paper_to_json_line(paper) + "\n")
     elif fmt != "markdown":
         output = render_citation(paper, fmt)  # type: ignore[arg-type]
         sys.stdout.write(output or "")

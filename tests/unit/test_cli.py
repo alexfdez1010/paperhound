@@ -62,13 +62,66 @@ def test_search_table(
 
 
 def test_search_json(runner: CliRunner, monkeypatch: pytest.MonkeyPatch, fake_paper: Paper) -> None:
+    """search --json emits JSONL: one JSON object per line."""
     monkeypatch.setattr(
         cli_module, "_build_aggregator", lambda *args, **kwargs: FakeAggregator([fake_paper])
     )
     result = runner.invoke(cli_module.app, ["search", "transformers", "--json"])
     assert result.exit_code == 0
-    data = json.loads(result.stdout)
-    assert data[0]["title"] == "A Cool Paper"
+    lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
+    assert len(lines) == 1
+    obj = json.loads(lines[0])
+    assert obj["title"] == "A Cool Paper"
+
+
+def test_search_json_multiple_papers(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, fake_paper: Paper
+) -> None:
+    """search --json with multiple results emits one JSON object per line (JSONL)."""
+    paper2 = Paper(
+        title="Another Paper",
+        authors=[Author(name="Carol")],
+        year=2023,
+        identifiers=PaperIdentifier(arxiv_id="2312.99999"),
+        sources=["openalex"],
+    )
+    monkeypatch.setattr(
+        cli_module,
+        "_build_aggregator",
+        lambda *args, **kwargs: FakeAggregator([fake_paper, paper2]),
+    )
+    result = runner.invoke(cli_module.app, ["search", "transformers", "--json"])
+    assert result.exit_code == 0
+    lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
+    assert len(lines) == 2
+    assert json.loads(lines[0])["title"] == "A Cool Paper"
+    assert json.loads(lines[1])["title"] == "Another Paper"
+
+
+def test_search_json_empty_results(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
+    """search --json with no results exits 0 with no JSONL output."""
+    monkeypatch.setattr(cli_module, "_build_aggregator", lambda *args, **kwargs: FakeAggregator([]))
+    result = runner.invoke(cli_module.app, ["search", "xyz", "--json"])
+    assert result.exit_code == 0
+    # stdout should be empty (no output for empty results in json mode)
+    assert result.stdout.strip() == ""
+
+
+def test_search_json_roundtrip(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, fake_paper: Paper
+) -> None:
+    """Each JSONL line round-trips back to a valid Paper model."""
+    from paperhound.models import Paper as PaperModel
+
+    monkeypatch.setattr(
+        cli_module, "_build_aggregator", lambda *args, **kwargs: FakeAggregator([fake_paper])
+    )
+    result = runner.invoke(cli_module.app, ["search", "transformers", "--json"])
+    assert result.exit_code == 0
+    for line in result.stdout.splitlines():
+        if line.strip():
+            reconstructed = PaperModel.model_validate(json.loads(line))
+            assert reconstructed.title == fake_paper.title
 
 
 def test_search_no_results(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -179,6 +232,56 @@ def test_show_not_found(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> N
     )
     result = runner.invoke(cli_module.app, ["show", "2401.12345"])
     assert result.exit_code == 1
+
+
+def test_show_json(runner: CliRunner, monkeypatch: pytest.MonkeyPatch, fake_paper: Paper) -> None:
+    """show --json emits a single compact JSON object on one line."""
+    monkeypatch.setattr(
+        cli_module,
+        "_build_aggregator",
+        lambda *args, **kwargs: FakeAggregator([], lookup=fake_paper),
+    )
+    result = runner.invoke(cli_module.app, ["show", "2401.12345", "--json"])
+    assert result.exit_code == 0
+    lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
+    assert len(lines) == 1, "show --json should emit exactly one line"
+    obj = json.loads(lines[0])
+    assert obj["title"] == "A Cool Paper"
+    assert obj["year"] == 2024
+
+
+def test_show_json_roundtrip(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, fake_paper: Paper
+) -> None:
+    """show --json output round-trips back to a valid Paper model."""
+    from paperhound.models import Paper as PaperModel
+
+    monkeypatch.setattr(
+        cli_module,
+        "_build_aggregator",
+        lambda *args, **kwargs: FakeAggregator([], lookup=fake_paper),
+    )
+    result = runner.invoke(cli_module.app, ["show", "2401.12345", "--json"])
+    assert result.exit_code == 0
+    reconstructed = PaperModel.model_validate(json.loads(result.stdout.strip()))
+    assert reconstructed.title == fake_paper.title
+    assert reconstructed.identifiers.arxiv_id == "2401.12345"
+
+
+def test_show_json_and_format_mutually_exclusive(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, fake_paper: Paper
+) -> None:
+    """Passing both --json and --format on show must exit non-zero with a clear error."""
+    monkeypatch.setattr(
+        cli_module,
+        "_build_aggregator",
+        lambda *args, **kwargs: FakeAggregator([], lookup=fake_paper),
+    )
+    for fmt in ("bibtex", "ris", "csljson"):
+        result = runner.invoke(cli_module.app, ["show", "2401.12345", "--json", "--format", fmt])
+        assert result.exit_code != 0, f"expected non-zero exit for --json --format {fmt}"
+        msg = (result.stdout + result.stderr).lower()
+        assert "mutually exclusive" in msg or "json" in msg
 
 
 class TestShowFormat:

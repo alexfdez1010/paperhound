@@ -64,5 +64,34 @@ def render_paper_detail(paper: Paper, console: Console) -> None:
         console.print(paper.abstract)
 
 
+# ---------------------------------------------------------------------------
+# Machine-readable serialisation helpers
+# ---------------------------------------------------------------------------
+
+
+def paper_to_json_line(paper: Paper) -> str:
+    """Serialise *paper* as a compact (no indent) JSON string (no trailing newline).
+
+    The schema is the full ``paperhound.models.Paper`` object serialised via
+    ``model_dump(mode="json")``.  Stable and public-facing.
+    """
+    return json.dumps(paper.model_dump(mode="json"), ensure_ascii=False)
+
+
+def papers_to_jsonl(papers: Iterable[Paper]) -> str:
+    """Serialise an iterable of papers to JSONL (one JSON object per line).
+
+    Returns an empty string when *papers* is empty.  The caller is responsible
+    for writing a trailing newline after the block if desired.
+    """
+    lines = [paper_to_json_line(p) for p in papers]
+    return "\n".join(lines)
+
+
 def papers_to_json(papers: Iterable[Paper]) -> str:
+    """Serialise papers as a pretty-printed JSON array.
+
+    Used by ``refs`` and ``cited-by`` for backwards-compatible JSON output.
+    New commands (``search``, ``show``) use the JSONL helpers above.
+    """
     return json.dumps([p.model_dump(mode="json") for p in papers], indent=2)

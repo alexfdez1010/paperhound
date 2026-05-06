@@ -5,10 +5,17 @@ from __future__ import annotations
 import io
 import json
 
+import pytest
 from rich.console import Console
 
 from paperhound.models import Author, Paper, PaperIdentifier
-from paperhound.output import papers_to_json, render_paper_detail, render_table
+from paperhound.output import (
+    paper_to_json_line,
+    papers_to_json,
+    papers_to_jsonl,
+    render_paper_detail,
+    render_table,
+)
 
 
 def make_paper() -> Paper:
@@ -56,3 +63,101 @@ def test_papers_to_json_roundtrip() -> None:
     parsed = json.loads(payload)
     assert parsed[0]["title"] == "Attention Is All You Need"
     assert parsed[0]["identifiers"]["arxiv_id"] == "1706.03762"
+
+
+# ---------------------------------------------------------------------------
+# JSONL helpers
+# ---------------------------------------------------------------------------
+
+
+def test_paper_to_json_line_is_parseable() -> None:
+    line = paper_to_json_line(make_paper())
+    obj = json.loads(line)
+    assert obj["title"] == "Attention Is All You Need"
+    assert obj["identifiers"]["arxiv_id"] == "1706.03762"
+
+
+def test_paper_to_json_line_is_single_line() -> None:
+    """The result must contain no newlines (compact, not pretty-printed)."""
+    line = paper_to_json_line(make_paper())
+    assert "\n" not in line
+
+
+def test_paper_to_json_line_roundtrip() -> None:
+    """Parsed line round-trips back to an equivalent Paper model."""
+    paper = make_paper()
+    reconstructed = Paper.model_validate(json.loads(paper_to_json_line(paper)))
+    assert reconstructed.title == paper.title
+    assert reconstructed.year == paper.year
+    assert reconstructed.identifiers.arxiv_id == paper.identifiers.arxiv_id
+
+
+def test_paper_to_json_line_unicode() -> None:
+    """Non-ASCII characters must be preserved (ensure_ascii=False)."""
+    paper = Paper(
+        title="Ünïcödé tïtle",
+        authors=[Author(name="François Müller")],
+        year=2024,
+        sources=[],
+    )
+    line = paper_to_json_line(paper)
+    # Verify the character is not escaped
+    assert "Ünïcödé" in line
+    assert "François" in line
+
+
+def test_paper_to_json_line_optional_fields_null() -> None:
+    """Optional fields absent from the model appear as null in JSON."""
+    paper = Paper(title="Minimal", sources=[])
+    obj = json.loads(paper_to_json_line(paper))
+    assert obj["abstract"] is None
+    assert obj["year"] is None
+    assert obj["venue"] is None
+
+
+def test_papers_to_jsonl_empty() -> None:
+    """Empty iterable yields an empty string."""
+    assert papers_to_jsonl([]) == ""
+
+
+def test_papers_to_jsonl_single() -> None:
+    """Single paper yields exactly one JSON line."""
+    result = papers_to_jsonl([make_paper()])
+    lines = result.splitlines()
+    assert len(lines) == 1
+    obj = json.loads(lines[0])
+    assert obj["title"] == "Attention Is All You Need"
+
+
+def test_papers_to_jsonl_multiple() -> None:
+    """Multiple papers yield one line per paper, each individually parseable."""
+    paper1 = make_paper()
+    paper2 = Paper(
+        title="BERT: Pre-training",
+        authors=[Author(name="Jacob Devlin")],
+        year=2018,
+        sources=["arxiv"],
+    )
+    result = papers_to_jsonl([paper1, paper2])
+    lines = result.splitlines()
+    assert len(lines) == 2
+    assert json.loads(lines[0])["title"] == "Attention Is All You Need"
+    assert json.loads(lines[1])["title"] == "BERT: Pre-training"
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "",
+        "A" * 500,
+        "Special: <>&\"'",
+        "Unicode: 中文 العربية Ελληνικά",
+        "Newline\nin\ntitle",
+    ],
+)
+def test_paper_to_json_line_edge_case_titles(title: str) -> None:
+    """Edge-case titles must serialise and round-trip without error."""
+    paper = Paper(title=title, sources=[])
+    line = paper_to_json_line(paper)
+    assert "\n" not in line  # still a single line
+    assert json.loads(line)["title"] == title
