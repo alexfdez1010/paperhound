@@ -27,6 +27,9 @@ is good enough to feed straight into an LLM context.
   all saved papers; `paperhound grep <query>` does offline full-text search
   over titles, abstracts, and stored Markdown bodies; `paperhound rm <id>`
   removes an entry.
+- 🔌 **MCP server** — `paperhound mcp` exposes all tools over stdio so
+  Claude Code and other MCP-compatible agents can call paperhound directly
+  without a skill shim. Install the optional extra: `pip install 'paperhound[mcp]'`.
 - 🤖 **Agent-ready** — ships with a `SKILL.md` and JSON output mode so any
   Claude / OpenAI / local agent can drive the CLI.
 - 🧪 **Heavily tested** — every module has unit tests; live integration tests
@@ -88,6 +91,7 @@ paperhound show 1706.03762 --json
 | `paperhound list` | List all papers in the local library. |
 | `paperhound grep <query>` | Full-text search the local library (title + abstract + Markdown body). |
 | `paperhound rm <id>` | Remove a paper from the local library (and its Markdown file, if any). |
+| `paperhound mcp` | Start an MCP server over stdio exposing all tools. Requires `pip install 'paperhound[mcp]'`. |
 | `paperhound version` | Print the installed version. |
 
 Run `paperhound <command> --help` for full options.
@@ -118,6 +122,62 @@ paperhound rm 1706.03762
 Re-adding a paper is idempotent — it updates the metadata in place.
 The schema is versioned; on a version mismatch paperhound reports a clear error
 rather than silently operating on a stale schema.
+
+## MCP server
+
+`paperhound mcp` starts an MCP (Model Context Protocol) server over stdio,
+exposing paperhound as callable tools to Claude Code and any other
+MCP-compatible agent.
+
+### Installation
+
+```bash
+pip install 'paperhound[mcp]'
+```
+
+### Tools exposed
+
+| Tool | Description |
+|---|---|
+| `search(query, limit, sources)` | Search papers across providers; returns list of paper records. |
+| `show(identifier)` | Fetch metadata + abstract for a single paper. |
+| `download(identifier, dest)` | Download a paper PDF; returns the path. |
+| `convert(identifier, dest)` | Convert a PDF/URL to Markdown; returns path or inline Markdown. |
+| `library_add(identifier, convert)` | Add a paper to the local library (optionally with Markdown). |
+| `library_list()` | List all papers in the local library. |
+| `library_grep(query, limit)` | Full-text search the local library; returns records with snippets. |
+
+### Wiring into Claude Code
+
+Add the following to your Claude Code `settings.json`
+(`~/.claude/settings.json` or the project-level `.claude/settings.json`):
+
+```json
+{
+  "mcpServers": {
+    "paperhound": {
+      "command": "paperhound",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+Or, if `paperhound` is installed in a virtual environment:
+
+```json
+{
+  "mcpServers": {
+    "paperhound": {
+      "command": "/path/to/venv/bin/paperhound",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+After saving, restart Claude Code. The `paperhound` tools will appear in the
+available tool list and Claude can call them directly — no skill shim needed.
 
 ## Identifier formats
 

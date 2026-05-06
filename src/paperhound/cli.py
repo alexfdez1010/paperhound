@@ -110,6 +110,7 @@ HELP_EPILOG = (
     "  paperhound list\n"
     '  paperhound grep "attention mechanism"\n'
     "  paperhound rm 2401.12345\n"
+    "  paperhound mcp\n"
     "\n"
     "\b\n"
     "Sources:     arxiv, openalex, dblp, crossref, huggingface (alias: hf),\n"
@@ -119,6 +120,7 @@ HELP_EPILOG = (
     "             results returned on timeout).\n"
     "Identifiers: arXiv id (2401.12345), DOI, Semantic Scholar id, or paper URL.\n"
     "Library:     ~/.paperhound/library/ (override: PAPERHOUND_LIBRARY_DIR).\n"
+    "MCP server:  paperhound mcp  (requires: pip install 'paperhound[mcp]').\n"
     "Docs:        https://github.com/alexfdez1010/paperhound"
 )
 
@@ -600,3 +602,37 @@ def library_rm(
             err_console.print(f"[yellow]Could not delete markdown file:[/yellow] {exc}")
 
     console.print(f"[green]Removed[/green] {identifier}")
+
+
+# ---------------------------------------------------------------------------
+# MCP server subcommand
+# ---------------------------------------------------------------------------
+
+
+@app.command(
+    name="mcp",
+    epilog=(
+        "Requires the mcp extra:\n\n\b\n"
+        "  pip install 'paperhound[mcp]'\n"
+        "\n\b\n"
+        "Wire into Claude Code's settings.json:\n"
+        "\n\b\n"
+        '  "mcpServers": {\n'
+        '    "paperhound": {\n'
+        '      "command": "paperhound",\n'
+        '      "args": ["mcp"]\n'
+        "    }\n"
+        "  }"
+    ),
+)
+def mcp() -> None:
+    """Start an MCP server over stdio, exposing paperhound as callable tools.
+
+    Requires the optional mcp extra: pip install 'paperhound[mcp]'
+
+    Exposed tools: search, show, download, convert, library_add,
+    library_list, library_grep.
+    """
+    from paperhound.mcp_server import run
+
+    run()

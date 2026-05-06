@@ -189,6 +189,32 @@ paperhound get 1706.03762 -o attention.md
 - **Network/provider error**: aggregator silently drops failing providers, so search still returns results from whichever provider responded; warn the user only if the merged list is empty.
 - **docling first run is slow**: it downloads model weights on first conversion. Don't retry; just wait.
 
+## MCP server (optional)
+
+paperhound ships a built-in MCP server. If you prefer direct MCP tool calls
+over shell invocations, install the optional extra and wire it once:
+
+```bash
+pip install 'paperhound[mcp]'
+```
+
+Add to `~/.claude/settings.json` (or project-level `.claude/settings.json`):
+
+```json
+{
+  "mcpServers": {
+    "paperhound": {
+      "command": "paperhound",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+The MCP server exposes the same operations as the CLI — `search`, `show`,
+`download`, `convert`, `library_add`, `library_list`, `library_grep` — as
+structured tool calls. Use the CLI skill **or** the MCP server, not both.
+
 ## Don'ts
 
 - Don't shell out to `curl`/`requests` to fetch papers — `paperhound download` already handles redirects, streaming, and PDF URL resolution.
