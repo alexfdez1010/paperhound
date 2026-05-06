@@ -22,6 +22,11 @@ is good enough to feed straight into an LLM context.
   any paper URL. Open-access PDFs are resolved automatically.
 - 📝 **PDF → Markdown via docling** — `paperhound convert paper.pdf` or
   `paperhound get <id>` for the full pipeline.
+- 📚 **Local library** — `paperhound add <id>` stores metadata in a
+  SQLite FTS5 database at `~/.paperhound/library/`. `paperhound list` shows
+  all saved papers; `paperhound grep <query>` does offline full-text search
+  over titles, abstracts, and stored Markdown bodies; `paperhound rm <id>`
+  removes an entry.
 - 🤖 **Agent-ready** — ships with a `SKILL.md` and JSON output mode so any
   Claude / OpenAI / local agent can drive the CLI.
 - 🧪 **Heavily tested** — every module has unit tests; live integration tests
@@ -79,9 +84,40 @@ paperhound show 1706.03762 --json
 | `paperhound download <id> -o <path>` | Download a paper PDF. |
 | `paperhound convert <pdf> -o <md>` | Convert a PDF (or any docling-supported file/URL) to Markdown. |
 | `paperhound get <id> -o <md>` | Download + convert in one step. `--keep-pdf` to keep the PDF. |
+| `paperhound add <id>` | Fetch metadata and add to local library. `--convert` also stores Markdown. |
+| `paperhound list` | List all papers in the local library. |
+| `paperhound grep <query>` | Full-text search the local library (title + abstract + Markdown body). |
+| `paperhound rm <id>` | Remove a paper from the local library (and its Markdown file, if any). |
 | `paperhound version` | Print the installed version. |
 
 Run `paperhound <command> --help` for full options.
+
+## Local library
+
+paperhound keeps a persistent per-user library at `~/.paperhound/library/`
+(override with `PAPERHOUND_LIBRARY_DIR`).  The library is backed by a SQLite
+FTS5 database — no extra dependencies required.
+
+```bash
+# Add a paper (metadata only)
+paperhound add 1706.03762
+
+# Add and also save the Markdown version of the PDF
+paperhound add 1706.03762 --convert
+
+# List all saved papers
+paperhound list
+
+# Full-text search offline
+paperhound grep "attention mechanism"
+
+# Remove a paper (and its Markdown file, if any)
+paperhound rm 1706.03762
+```
+
+Re-adding a paper is idempotent — it updates the metadata in place.
+The schema is versioned; on a version mismatch paperhound reports a clear error
+rather than silently operating on a stale schema.
 
 ## Identifier formats
 

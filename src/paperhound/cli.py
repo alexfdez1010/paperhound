@@ -14,8 +14,9 @@ from rich.console import Console
 from paperhound import __version__
 from paperhound.convert import convert_to_markdown
 from paperhound.download import download_pdf, resolve_pdf_url
-from paperhound.errors import PaperhoundError
+from paperhound.errors import LibraryError, PaperhoundError
 from paperhound.identifiers import IdentifierKind, detect
+from paperhound.library import Library, _canonical_id, _library_dir, _safe_filename
 from paperhound.output import papers_to_json, render_paper_detail, render_table
 from paperhound.search import (
     DEFAULT_TIMEOUT,
@@ -105,6 +106,10 @@ HELP_EPILOG = (
     "  paperhound download 10.48550/arXiv.2401.12345 -o ./papers\n"
     "  paperhound convert paper.pdf -o paper.md\n"
     "  paperhound get 2401.12345 -o rag.md\n"
+    "  paperhound add 2401.12345 --convert\n"
+    "  paperhound list\n"
+    '  paperhound grep "attention mechanism"\n'
+    "  paperhound rm 2401.12345\n"
     "\n"
     "\b\n"
     "Sources:     arxiv, openalex, dblp, crossref, huggingface (alias: hf),\n"
@@ -113,6 +118,7 @@ HELP_EPILOG = (
     "             budget; round-robin merge across providers; partial\n"
     "             results returned on timeout).\n"
     "Identifiers: arXiv id (2401.12345), DOI, Semantic Scholar id, or paper URL.\n"
+    "Library:     ~/.paperhound/library/ (override: PAPERHOUND_LIBRARY_DIR).\n"
     "Docs:        https://github.com/alexfdez1010/paperhound"
 )
 
@@ -405,3 +411,192 @@ def get(
                 pass
 
     console.print(f"[green]Wrote[/green] {md_path}")
+
+
+# ---------------------------------------------------------------------------
+# Local library commands
+# ---------------------------------------------------------------------------
+
+
+def _open_library() -> Library:
+    """Open the default (or env-var-overridden) library; surface errors cleanly."""
+    try:
+        return Library()
+    except LibraryError as exc:
+        _exit_on_error(exc)
+        raise  # unreachable; satisfies type checkers
+
+
+@app.command(
+    name="add",
+    epilog=("Examples:\n\n\b\n  paperhound add 2401.12345\n  paperhound add 2401.12345 --convert"),
+)
+def library_add(
+    identifier: str = typer.Argument(..., help="arXiv id, DOI, Semantic Scholar id, or paper URL."),
+    convert_flag: bool = typer.Option(
+        False,
+        "--convert",
+        help="Also fetch and convert the PDF to Markdown and store it in the library.",
+    ),
+) -> None:
+    """Fetch a paper's metadata and add it to the local library.
+
+    Re-adding an existing entry updates its metadata (idempotent).
+    Pass --convert to also store a Markdown version of the PDF.
+    """
+    aggregator = _build_aggregator()
+    try:
+        paper = aggregator.get(identifier)
+    except PaperhoundError as exc:
+        _exit_on_error(exc)
+        return
+
+    if paper is None:
+        err_console.print(f"[yellow]Not found:[/yellow] {identifier}")
+        raise typer.Exit(code=1)
+
+    lib = _open_library()
+    paper_id = _canonical_id(paper)
+
+    md_path: Path | None = None
+    if convert_flag:
+        safe = _safe_filename(paper_id)
+        md_path = _library_dir() / f"{safe}.md"
+        # Resolve the library dir the same way the Library object does.
+        actual_lib_dir = lib._dir
+        md_path = actual_lib_dir / f"{safe}.md"
+        tmp_pdf = actual_lib_dir / f"{safe}.pdf"
+        try:
+            url = resolve_pdf_url(identifier, lookup_pdf_url=_lookup_pdf_url)
+            download_pdf(url, tmp_pdf)
+            convert_to_markdown(tmp_pdf, output=md_path)
+        except PaperhoundError as exc:
+            _exit_on_error(exc)
+            return
+        finally:
+            if tmp_pdf.exists():
+                try:
+                    tmp_pdf.unlink()
+                except OSError:
+                    pass
+
+    try:
+        paper_id = lib.add(paper, markdown_path=md_path)
+        if md_path is not None:
+            lib.update_markdown(paper_id, md_path)
+    except LibraryError as exc:
+        _exit_on_error(exc)
+        return
+
+    console.print(f"[green]Added[/green] {paper_id}")
+    if md_path:
+        console.print(f"[green]Markdown[/green] {md_path}")
+
+
+@app.command(
+    name="list",
+    epilog="Examples:\n\n\b\n  paperhound list",
+)
+def library_list() -> None:
+    """List all papers in the local library."""
+    lib = _open_library()
+    try:
+        entries = lib.list()
+    except LibraryError as exc:
+        _exit_on_error(exc)
+        return
+
+    if not entries:
+        console.print("[dim]Library is empty.[/dim]")
+        return
+
+    from rich.table import Table
+
+    table = Table(show_lines=False, header_style="bold cyan")
+    table.add_column("ID")
+    table.add_column("Title", overflow="fold")
+    table.add_column("Authors", overflow="fold")
+    table.add_column("Year", justify="right")
+    table.add_column("MD", justify="center")
+
+    for entry in entries:
+        table.add_row(
+            entry.id,
+            entry.title,
+            entry.first_author,
+            str(entry.year) if entry.year else "-",
+            "yes" if entry.markdown_path else "-",
+        )
+    console.print(table)
+
+
+@app.command(
+    name="grep",
+    epilog=(
+        "Examples:\n\n\b\n"
+        '  paperhound grep "attention mechanism"\n'
+        '  paperhound grep "diffusion" --limit 5'
+    ),
+)
+def library_grep(
+    query: str = typer.Argument(..., help="Full-text search query."),
+    limit: int = typer.Option(20, "--limit", "-n", min=1, max=200, help="Max hits (default 20)."),
+) -> None:
+    """Full-text search the local library (title + abstract + Markdown body)."""
+    if not query.strip():
+        raise typer.BadParameter("Query must not be empty.")
+
+    lib = _open_library()
+    try:
+        hits = lib.grep(query, limit=limit)
+    except LibraryError as exc:
+        _exit_on_error(exc)
+        return
+
+    if not hits:
+        console.print("[dim]No hits.[/dim]")
+        return
+
+    for hit in hits:
+        console.print(f"[bold]{hit.id}[/bold]  {hit.title}")
+        console.print(f"  [dim]{hit.snippet}[/dim]")
+        console.print()
+
+
+@app.command(
+    name="rm",
+    epilog="Examples:\n\n\b\n  paperhound rm 2401.12345",
+)
+def library_rm(
+    identifier: str = typer.Argument(..., help="Library id of the paper to remove."),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        "-y",
+        help="Skip the confirmation prompt.",
+    ),
+) -> None:
+    """Remove a paper from the local library (and its Markdown file, if any)."""
+    lib = _open_library()
+    try:
+        entry = lib.get(identifier)
+        if entry is None:
+            err_console.print(f"[yellow]Not in library:[/yellow] {identifier}")
+            raise typer.Exit(code=1)
+
+        if not yes:
+            typer.confirm(f"Remove {identifier!r} from library?", abort=True)
+
+        md_path = lib.remove(identifier)
+    except LibraryError as exc:
+        _exit_on_error(exc)
+        return
+
+    if md_path and md_path.exists():
+        try:
+            md_path.unlink()
+            console.print(f"[dim]Deleted markdown:[/dim] {md_path}")
+        except OSError as exc:
+            err_console.print(f"[yellow]Could not delete markdown file:[/yellow] {exc}")
+
+    console.print(f"[green]Removed[/green] {identifier}")

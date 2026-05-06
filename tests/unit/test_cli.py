@@ -10,6 +10,7 @@ import pytest
 from typer.testing import CliRunner
 
 from paperhound import cli as cli_module
+from paperhound.library import Library
 from paperhound.models import Author, Paper, PaperIdentifier
 
 
@@ -244,3 +245,255 @@ def test_get_pipeline_writes_markdown(
     assert md_path.read_text() == "# md\n"
     # PDF removed by default
     assert not (tmp_path / "2401.12345.pdf").exists()
+
+
+# ---------------------------------------------------------------------------
+# Library command tests
+# ---------------------------------------------------------------------------
+
+
+def _make_library(tmp_path: Path) -> Library:
+    """Helper: create an isolated Library for testing."""
+    return Library(path=tmp_path)
+
+
+def _patch_library(monkeypatch: pytest.MonkeyPatch, lib: Library) -> None:
+    """Patch _open_library in the CLI module to return a pre-built Library."""
+    monkeypatch.setattr(cli_module, "_open_library", lambda: lib)
+
+
+class TestLibraryAdd:
+    def test_add_happy_path(
+        self,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_paper: Paper,
+        tmp_path: Path,
+    ) -> None:
+        lib = _make_library(tmp_path)
+        _patch_library(monkeypatch, lib)
+        monkeypatch.setattr(
+            cli_module,
+            "_build_aggregator",
+            lambda *a, **k: FakeAggregator([], lookup=fake_paper),
+        )
+
+        result = runner.invoke(cli_module.app, ["add", "2401.12345"])
+        assert result.exit_code == 0, result.stdout + result.stderr
+        assert "Added" in result.stdout
+
+        entries = lib.list()
+        assert len(entries) == 1
+        assert entries[0].title == "A Cool Paper"
+
+    def test_add_not_found(
+        self,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        lib = _make_library(tmp_path)
+        _patch_library(monkeypatch, lib)
+        monkeypatch.setattr(
+            cli_module,
+            "_build_aggregator",
+            lambda *a, **k: FakeAggregator([], lookup=None),
+        )
+
+        result = runner.invoke(cli_module.app, ["add", "2401.12345"])
+        assert result.exit_code == 1
+
+    def test_add_with_convert(
+        self,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_paper: Paper,
+        tmp_path: Path,
+    ) -> None:
+        lib = _make_library(tmp_path)
+        _patch_library(monkeypatch, lib)
+        monkeypatch.setattr(
+            cli_module,
+            "_build_aggregator",
+            lambda *a, **k: FakeAggregator([], lookup=fake_paper),
+        )
+
+        def fake_resolve(identifier: str, *, lookup_pdf_url=None) -> str:
+            return "https://example.org/paper.pdf"
+
+        def fake_download(url: str, dest: Path, **_) -> Path:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(b"%PDF")
+            return dest
+
+        def fake_convert(source, output=None):
+            if output is not None:
+                Path(output).write_text("# Paper\n\nSome content.\n")
+            return "# Paper\n\nSome content.\n"
+
+        monkeypatch.setattr(cli_module, "resolve_pdf_url", fake_resolve)
+        monkeypatch.setattr(cli_module, "download_pdf", fake_download)
+        monkeypatch.setattr(cli_module, "convert_to_markdown", fake_convert)
+
+        result = runner.invoke(cli_module.app, ["add", "2401.12345", "--convert"])
+        assert result.exit_code == 0, result.stdout + result.stderr
+        assert "Added" in result.stdout
+        assert "Markdown" in result.stdout
+
+        entries = lib.list()
+        assert len(entries) == 1
+        assert entries[0].markdown_path is not None
+
+    def test_add_idempotent(
+        self,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_paper: Paper,
+        tmp_path: Path,
+    ) -> None:
+        lib = _make_library(tmp_path)
+        _patch_library(monkeypatch, lib)
+        monkeypatch.setattr(
+            cli_module,
+            "_build_aggregator",
+            lambda *a, **k: FakeAggregator([], lookup=fake_paper),
+        )
+
+        runner.invoke(cli_module.app, ["add", "2401.12345"])
+        runner.invoke(cli_module.app, ["add", "2401.12345"])
+        assert len(lib.list()) == 1, "Duplicate add must not create two rows"
+
+
+class TestLibraryList:
+    def test_list_empty(
+        self,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        lib = _make_library(tmp_path)
+        _patch_library(monkeypatch, lib)
+
+        result = runner.invoke(cli_module.app, ["list"])
+        assert result.exit_code == 0
+        assert "empty" in result.stdout.lower()
+
+    def test_list_shows_entries(
+        self,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_paper: Paper,
+        tmp_path: Path,
+    ) -> None:
+        lib = _make_library(tmp_path)
+        lib.add(fake_paper)
+        _patch_library(monkeypatch, lib)
+
+        result = runner.invoke(cli_module.app, ["list"])
+        assert result.exit_code == 0
+        assert "A Cool Paper" in result.stdout
+
+
+class TestLibraryGrep:
+    def test_grep_hit(
+        self,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_paper: Paper,
+        tmp_path: Path,
+    ) -> None:
+        lib = _make_library(tmp_path)
+        lib.add(fake_paper)
+        _patch_library(monkeypatch, lib)
+
+        result = runner.invoke(cli_module.app, ["grep", "abstract"])
+        assert result.exit_code == 0
+        assert "2401.12345" in result.stdout
+
+    def test_grep_no_hits(
+        self,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        lib = _make_library(tmp_path)
+        _patch_library(monkeypatch, lib)
+
+        result = runner.invoke(cli_module.app, ["grep", "quantum entanglement"])
+        assert result.exit_code == 0
+        assert "No hits" in result.stdout
+
+    def test_grep_empty_query(
+        self,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        lib = _make_library(tmp_path)
+        _patch_library(monkeypatch, lib)
+
+        result = runner.invoke(cli_module.app, ["grep", "   "])
+        assert result.exit_code != 0
+
+    def test_grep_fts_special_chars(
+        self,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_paper: Paper,
+        tmp_path: Path,
+    ) -> None:
+        """FTS5 special characters in query must not crash the command."""
+        lib = _make_library(tmp_path)
+        lib.add(fake_paper)
+        _patch_library(monkeypatch, lib)
+
+        result = runner.invoke(cli_module.app, ["grep", "title:abstract*"])
+        assert result.exit_code == 0
+
+
+class TestLibraryRm:
+    def test_rm_existing(
+        self,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_paper: Paper,
+        tmp_path: Path,
+    ) -> None:
+        lib = _make_library(tmp_path)
+        lib.add(fake_paper)
+        _patch_library(monkeypatch, lib)
+
+        result = runner.invoke(cli_module.app, ["rm", "--yes", "2401.12345"])
+        assert result.exit_code == 0, result.stdout + result.stderr
+        assert "Removed" in result.stdout
+        assert lib.list() == []
+
+    def test_rm_not_found(
+        self,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        lib = _make_library(tmp_path)
+        _patch_library(monkeypatch, lib)
+
+        result = runner.invoke(cli_module.app, ["rm", "--yes", "does-not-exist"])
+        assert result.exit_code == 1
+
+    def test_rm_deletes_markdown_file(
+        self,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_paper: Paper,
+        tmp_path: Path,
+    ) -> None:
+        lib = _make_library(tmp_path)
+        md_file = tmp_path / "paper.md"
+        md_file.write_text("# Paper")
+        lib.add(fake_paper, markdown_path=md_file)
+        lib.update_markdown("2401.12345", md_file)
+        _patch_library(monkeypatch, lib)
+
+        result = runner.invoke(cli_module.app, ["rm", "--yes", "2401.12345"])
+        assert result.exit_code == 0
+        assert not md_file.exists(), "Markdown file should be deleted on rm"

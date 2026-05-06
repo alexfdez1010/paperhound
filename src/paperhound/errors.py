@@ -19,3 +19,7 @@ class DownloadError(PaperhoundError):
 
 class ConversionError(PaperhoundError):
     """Raised when a document cannot be converted to Markdown."""
+
+
+class LibraryError(PaperhoundError):
+    """Raised when a local-library operation fails (schema mismatch, missing entry, …)."""

@@ -50,10 +50,42 @@ Trigger this skill when the user asks for any of:
 - "Download this paper" (with an id, DOI, or URL)
 - "Convert this PDF to markdown"
 - "Get me a markdown version of paper X so I can quote it"
+- "Add paper X to my library"
+- "Search my library for Y"
+- "List papers I've saved"
 
 ## Commands
 
 Always pass `--json` when you plan to consume the output programmatically.
+
+### Local library — add / list / grep / rm
+
+paperhound keeps a persistent per-user library at `~/.paperhound/library/`
+(SQLite FTS5, no extra dependencies). Override the directory with the
+`PAPERHOUND_LIBRARY_DIR` environment variable.
+
+```bash
+# Add a paper's metadata to the library (idempotent re-add updates the row)
+paperhound add <identifier>
+
+# Add and also convert the PDF to Markdown, stored in the library directory
+paperhound add <identifier> --convert
+
+# List all saved papers
+paperhound list
+
+# Full-text search over title + abstract + Markdown body (offline)
+paperhound grep "<query>" [--limit N]
+
+# Remove a paper from the library (and deletes its Markdown file, if any)
+paperhound rm <identifier> [--yes]
+```
+
+Typical agent workflow to build a local corpus:
+
+1. `paperhound search "…" --json -n 10` — find candidates.
+2. `paperhound add <id> --convert` — persist metadata + Markdown.
+3. `paperhound grep "…"` — query the corpus offline for future sessions.
 
 ### Search — unified across providers
 
@@ -120,6 +152,19 @@ paperhound get <identifier> [-o output.md] [--keep-pdf]
    `title`, `authors`, `year`, `abstract`, `url`.
 4. If the user wants the full text: `paperhound get <id> -o paper.md` and read
    the resulting file.
+
+### Corpus-building workflow
+
+```bash
+# 1. Save a paper for offline access
+paperhound add 1706.03762 --convert
+
+# 2. In future sessions, search offline without API calls
+paperhound grep "multi-head attention"
+
+# 3. Browse the corpus
+paperhound list
+```
 
 ## Examples
 
