@@ -24,10 +24,9 @@ from paperhound.search import (
     resolve,
 )
 
-# Providers enabled by default. CORE is opt-in (requires CORE_API_KEY),
-# Semantic Scholar is currently rate-limited / 403 for many keys, and
-# Papers with Code is defunct (the API was decommissioned in 2025); all three
-# stay registered but off the default list — opt in via ``--source``.
+# Providers enabled by default. CORE is opt-in (requires CORE_API_KEY) and
+# Semantic Scholar is currently rate-limited / 403 for many keys; both stay
+# registered but off the default list — opt in via ``--source``.
 DEFAULT_SOURCES: tuple[str, ...] = (
     "arxiv",
     "openalex",
@@ -51,10 +50,9 @@ HELP_EPILOG = (
     "\n"
     "\b\n"
     "Sources:     arxiv, openalex, dblp, crossref, huggingface (alias: hf),\n"
-    "             semantic_scholar (alias: s2), core, paperswithcode\n"
-    "             (defunct since 2025). Defaults to arxiv + openalex + dblp +\n"
-    "             crossref + huggingface (parallel, 10s budget; partial\n"
-    "             results returned on timeout).\n"
+    "             semantic_scholar (alias: s2), core. Defaults to arxiv +\n"
+    "             openalex + dblp + crossref + huggingface (parallel, 10s\n"
+    "             budget; partial results returned on timeout).\n"
     "Identifiers: arXiv id (2401.12345), DOI, Semantic Scholar id, or paper URL.\n"
     "Docs:        https://github.com/alexfdez1010/paperhound"
 )
@@ -66,7 +64,7 @@ app = typer.Typer(
     rich_markup_mode=None,
     help=(
         "Search, download, and convert academic papers from the command line.\n\n"
-        "Aggregates arXiv, OpenAlex, DBLP, Crossref, Papers with Code"
+        "Aggregates arXiv, OpenAlex, DBLP, Crossref, Hugging Face Papers"
         " (and optionally Semantic Scholar / CORE) in parallel, then converts"
         " PDFs to Markdown via docling."
     ),

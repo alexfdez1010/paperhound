@@ -21,7 +21,6 @@ class PaperIdentifier(BaseModel):
     openalex_id: str | None = None
     dblp_key: str | None = None
     core_id: str | None = None
-    pwc_id: str | None = None
 
     def primary(self) -> str:
         """Return the most stable identifier available."""
@@ -32,7 +31,6 @@ class PaperIdentifier(BaseModel):
             or self.openalex_id
             or self.dblp_key
             or self.core_id
-            or self.pwc_id
             or ""
         )
 
@@ -80,7 +78,6 @@ class Paper(BaseModel):
             openalex_id=self.identifiers.openalex_id or other.identifiers.openalex_id,
             dblp_key=self.identifiers.dblp_key or other.identifiers.dblp_key,
             core_id=self.identifiers.core_id or other.identifiers.core_id,
-            pwc_id=self.identifiers.pwc_id or other.identifiers.pwc_id,
         )
         if not merged.authors:
             merged.authors = other.authors

@@ -101,14 +101,6 @@ paperhound accepts whatever you have on hand:
 | `CORE_API_KEY` | Required to enable the CORE provider. Without a key the provider reports unavailable and the aggregator skips it silently. Get a free key at <https://core.ac.uk/services/api>. |
 | `SEMANTIC_SCHOLAR_API_KEY` | Optional. Semantic Scholar's anonymous quota is shared globally and 429s are common; the provider retries with exponential backoff. Set this to your own key for steadier throughput. |
 
-> **Note on Papers with Code.** The `paperswithcode.com/api` endpoint was
-> retired in 2025 (Hugging Face acquired the project) and now redirects to
-> `huggingface.co/papers`. paperhound therefore reports the `paperswithcode`
-> source as unavailable by default and queries Hugging Face Papers instead via
-> the `huggingface` source. The PwC provider class is still in the registry
-> for completeness; pass `--source paperswithcode` only if you have a private
-> mirror.
-
 ### Adding a new provider
 
 `paperhound.search` is a registry of provider factories. To add a new source:

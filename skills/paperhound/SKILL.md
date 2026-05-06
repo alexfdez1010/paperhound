@@ -67,7 +67,7 @@ paperhound search "<query>" [--limit N] [--year-min YYYY] [--year-max YYYY] [--s
   from the response — the command still succeeds with whatever returned.
 - JSON output is a list of objects with: `title`, `authors[]`, `abstract`,
   `year`, `venue`, `url`, `pdf_url`, `citation_count`,
-  `identifiers.{arxiv_id,doi,semantic_scholar_id,openalex_id,dblp_key,core_id,pwc_id}`,
+  `identifiers.{arxiv_id,doi,semantic_scholar_id,openalex_id,dblp_key,core_id}`,
   `sources[]`.
 
 ### Show — abstract + metadata for a single paper
@@ -147,4 +147,3 @@ paperhound get 1706.03762 -o attention.md
 - Don't pass user-controlled strings as `--source` values without restricting
   them to the known set: `arxiv`, `openalex`, `dblp`, `crossref`,
   `huggingface` (alias `hf`), `semantic_scholar` (alias `s2`), `core`.
-  (`paperswithcode` is registered but defunct since 2025.)

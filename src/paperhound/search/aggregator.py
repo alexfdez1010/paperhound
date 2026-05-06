@@ -39,8 +39,6 @@ def _dedup_key(paper: Paper) -> str:
         return f"dblp:{ids.dblp_key}"
     if ids.core_id:
         return f"core:{ids.core_id}"
-    if ids.pwc_id:
-        return f"pwc:{ids.pwc_id}"
     return f"title:{_normalize_title(paper.title)}"
 
 

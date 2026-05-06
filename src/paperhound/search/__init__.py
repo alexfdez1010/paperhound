@@ -8,7 +8,6 @@ from paperhound.search.crossref import CrossrefProvider
 from paperhound.search.dblp import DBLPProvider
 from paperhound.search.huggingface import HuggingFaceProvider
 from paperhound.search.openalex import OpenAlexProvider
-from paperhound.search.paperswithcode import PapersWithCodeProvider
 from paperhound.search.registry import (
     build,
     build_many,
@@ -24,7 +23,6 @@ register("openalex", OpenAlexProvider)
 register("dblp", DBLPProvider)
 register("crossref", CrossrefProvider)
 register("huggingface", HuggingFaceProvider, aliases=("hf",))
-register("paperswithcode", PapersWithCodeProvider, aliases=("pwc",))
 register("semantic_scholar", SemanticScholarProvider, aliases=("s2",))
 register("core", CoreProvider)
 
@@ -37,7 +35,6 @@ __all__ = [
     "DEFAULT_TIMEOUT",
     "HuggingFaceProvider",
     "OpenAlexProvider",
-    "PapersWithCodeProvider",
     "SearchAggregator",
     "SearchProvider",
     "SearchQuery",
