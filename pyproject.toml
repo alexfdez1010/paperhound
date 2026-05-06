@@ -1,6 +1,6 @@
 [project]
 name = "paperhound"
-version = "0.1.1"
+version = "0.1.2"
 description = "CLI to search, download, and convert academic papers (arXiv, Semantic Scholar) into Markdown — built for AI/ML researchers."
 readme = "README.md"
 requires-python = ">=3.10"

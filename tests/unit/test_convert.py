@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from paperhound.convert import convert_to_markdown
+from paperhound.convert import convert_to_markdown, pdf_to_markdown
 from paperhound.errors import ConversionError
 
 
@@ -53,3 +53,28 @@ def test_convert_rejects_unexpected_result_object() -> None:
 
     with pytest.raises(ConversionError):
         convert_to_markdown("paper.pdf", converter=WeirdConverter())
+
+
+def test_pdf_to_markdown_converts_local_file(tmp_path: Path) -> None:
+    pdf = tmp_path / "paper.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n% minimal stub\n")
+    fake = FakeConverter("# From PDF\n")
+    out = tmp_path / "paper.md"
+
+    md = pdf_to_markdown(pdf, output=out, converter=fake)
+
+    assert md == "# From PDF\n"
+    assert out.read_text() == "# From PDF\n"
+    assert fake.calls == [pdf]
+
+
+def test_pdf_to_markdown_missing_file(tmp_path: Path) -> None:
+    with pytest.raises(ConversionError, match="not found"):
+        pdf_to_markdown(tmp_path / "nope.pdf", converter=FakeConverter())
+
+
+def test_pdf_to_markdown_rejects_non_pdf_suffix(tmp_path: Path) -> None:
+    txt = tmp_path / "paper.txt"
+    txt.write_text("not a pdf")
+    with pytest.raises(ConversionError, match=r"\.pdf"):
+        pdf_to_markdown(txt, converter=FakeConverter())
