@@ -166,20 +166,9 @@ echo "── ALL SMOKE STEPS PASSED ──"
 
 ### 3. What to record
 
-Save the run output to `docs/SMOKE_REPORT_<version>.md` whenever a step fails
-*or* whenever a release introduces user-visible behavior changes. Template:
-
-```markdown
-# Smoke report — paperhound <version>
-Date: <YYYY-MM-DD>  Operator: <name>  Scratch: /tmp/ph-smoke
-
-## Walkthrough
-| # | Command | Result | Notes |
-| Findings (severity)
-| Action plan
-```
-
-`docs/SMOKE_REPORT_0.3.0.md` is the worked example.
+When a step fails, capture the failing command + output and open an issue.
+Don't commit per-release smoke reports to the repo — they go stale fast and
+the procedure above is the canonical artifact.
 
 ## When smoke fails
 
