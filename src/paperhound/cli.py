@@ -22,14 +22,46 @@ from paperhound.search import (
     SemanticScholarProvider,
 )
 
+# Click's `\b` marker (on its own line, with blank lines around the paragraph)
+# tells the help formatter not to rewrap the following block — preserves
+# manual line breaks in examples.
+HELP_EPILOG = (
+    "Examples:\n"
+    "\n"
+    "\b\n"
+    '  paperhound search "retrieval augmented generation" -n 5\n'
+    "  paperhound show 2401.12345\n"
+    "  paperhound download 10.48550/arXiv.2401.12345 -o ./papers\n"
+    "  paperhound convert paper.pdf -o paper.md\n"
+    "  paperhound get 2401.12345 -o rag.md\n"
+    "\n"
+    "\b\n"
+    "Sources:     arxiv, semantic_scholar (alias: s2). Default: both.\n"
+    "Identifiers: arXiv id (2401.12345), DOI, Semantic Scholar id, or paper URL.\n"
+    "Docs:        https://github.com/alexfdez1010/paperhound"
+)
+
+
 app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
-    help="Search, download, and convert academic papers from the command line.",
+    rich_markup_mode=None,
+    help=(
+        "Search, download, and convert academic papers from the command line.\n\n"
+        "Aggregates arXiv and Semantic Scholar; converts PDFs to Markdown via docling."
+    ),
+    epilog=HELP_EPILOG,
+    context_settings={"help_option_names": ["-h", "--help"]},
 )
 
 console = Console()
 err_console = Console(stderr=True)
+
+
+def _version_callback(value: bool) -> None:
+    if value:
+        console.print(__version__)
+        raise typer.Exit()
 
 
 def _build_aggregator(sources: list[str] | None = None) -> SearchAggregator:
@@ -51,7 +83,15 @@ def _exit_on_error(exc: Exception) -> None:
 
 @app.callback()
 def _root(
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging."),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose (DEBUG) logging."),
+    _version: bool = typer.Option(
+        False,
+        "--version",
+        "-V",
+        help="Show paperhound version and exit.",
+        callback=_version_callback,
+        is_eager=True,
+    ),
 ) -> None:
     logging.basicConfig(
         level=logging.DEBUG if verbose else logging.WARNING,
@@ -65,21 +105,37 @@ def version() -> None:
     console.print(__version__)
 
 
-@app.command()
+@app.command(
+    epilog=(
+        "Examples:\n\n\b\n"
+        '  paperhound search "diffusion models" -n 20\n'
+        '  paperhound search "graph neural networks" -s arxiv --year-min 2023\n'
+        '  paperhound search "llm agents" --json | jq .'
+    ),
+)
 def search(
-    query: str = typer.Argument(..., help="Free-text query."),
-    limit: int = typer.Option(10, "--limit", "-n", min=1, max=100),
+    query: str = typer.Argument(..., help='Free-text query, e.g. "vision transformers".'),
+    limit: int = typer.Option(
+        10, "--limit", "-n", min=1, max=100, help="Max results to return (1-100)."
+    ),
     source: list[str] | None = typer.Option(
         None,
         "--source",
         "-s",
-        help="Restrict to a provider (arxiv, semantic_scholar). Repeatable.",
+        help=(
+            "Restrict to a provider. Choices: arxiv, semantic_scholar (alias: s2). "
+            "Repeatable; default queries all providers."
+        ),
     ),
-    year_min: int | None = typer.Option(None, "--year-min"),
-    year_max: int | None = typer.Option(None, "--year-max"),
-    json_output: bool = typer.Option(False, "--json", help="Emit JSON instead of a table."),
+    year_min: int | None = typer.Option(
+        None, "--year-min", help="Earliest publication year (inclusive)."
+    ),
+    year_max: int | None = typer.Option(
+        None, "--year-max", help="Latest publication year (inclusive)."
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Emit JSON instead of a Rich table."),
 ) -> None:
-    """Search across all providers and print the merged results."""
+    """Search papers across providers and print merged, deduplicated results."""
     aggregator = _build_aggregator(source)
     try:
         papers = aggregator.search(
@@ -104,10 +160,16 @@ def search(
         render_table(papers, console)
 
 
-@app.command()
+@app.command(
+    epilog=(
+        "Examples:\n\n\b\n"
+        "  paperhound show 2401.12345\n"
+        "  paperhound show 10.48550/arXiv.2401.12345 --json"
+    ),
+)
 def show(
-    identifier: str = typer.Argument(..., help="arXiv id, DOI, S2 id, or paper URL."),
-    json_output: bool = typer.Option(False, "--json"),
+    identifier: str = typer.Argument(..., help="arXiv id, DOI, Semantic Scholar id, or paper URL."),
+    json_output: bool = typer.Option(False, "--json", help="Emit JSON instead of formatted text."),
 ) -> None:
     """Fetch a paper's metadata and abstract."""
     aggregator = _build_aggregator()
@@ -134,17 +196,27 @@ def _lookup_pdf_url(identifier: str) -> str | None:
     return paper.pdf_url if paper else None
 
 
-@app.command()
+@app.command(
+    epilog=(
+        "Examples:\n\n\b\n"
+        "  paperhound download 2401.12345\n"
+        "  paperhound download 2401.12345 -o ./papers/\n"
+        "  paperhound download 2401.12345 -o paper.pdf"
+    ),
+)
 def download(
-    identifier: str = typer.Argument(..., help="arXiv id, DOI, S2 id, or paper URL."),
+    identifier: str = typer.Argument(..., help="arXiv id, DOI, Semantic Scholar id, or paper URL."),
     output: Path | None = typer.Option(
         None,
         "--output",
         "-o",
-        help="Destination file or directory. Defaults to the current directory.",
+        help=(
+            "Destination file or directory. If a directory, the file is named "
+            "after the identifier. Defaults to the current directory."
+        ),
     ),
 ) -> Path:
-    """Download a paper PDF."""
+    """Download a paper PDF to disk."""
     destination = output if output is not None else Path.cwd()
     try:
         url = resolve_pdf_url(identifier, lookup_pdf_url=_lookup_pdf_url)
@@ -156,12 +228,20 @@ def download(
     return path
 
 
-@app.command()
+@app.command(
+    epilog=(
+        "Examples:\n\n\b\n"
+        "  paperhound convert paper.pdf -o paper.md\n"
+        "  paperhound convert https://arxiv.org/pdf/2401.12345 > paper.md"
+    ),
+)
 def convert(
-    source: str = typer.Argument(..., help="Path or URL to a PDF / supported document."),
-    output: Path | None = typer.Option(None, "--output", "-o"),
+    source: str = typer.Argument(..., help="Path or URL to a PDF / docling-supported document."),
+    output: Path | None = typer.Option(
+        None, "--output", "-o", help="Markdown output path. Prints to stdout when omitted."
+    ),
 ) -> None:
-    """Convert a document to Markdown via docling."""
+    """Convert a PDF or supported document to Markdown via docling."""
     try:
         markdown = convert_to_markdown(source, output=output)
     except PaperhoundError as exc:
@@ -174,16 +254,24 @@ def convert(
         console.print(f"[green]Wrote[/green] {output}")
 
 
-@app.command()
+@app.command(
+    epilog=(
+        "Examples:\n\n\b\n"
+        "  paperhound get 2401.12345\n"
+        "  paperhound get 2401.12345 -o rag.md --keep-pdf"
+    ),
+)
 def get(
-    identifier: str = typer.Argument(..., help="arXiv id, DOI, S2 id, or paper URL."),
+    identifier: str = typer.Argument(..., help="arXiv id, DOI, Semantic Scholar id, or paper URL."),
     output: Path | None = typer.Option(
         None,
         "--output",
         "-o",
         help="Markdown output path. Defaults to <id>.md in the current directory.",
     ),
-    keep_pdf: bool = typer.Option(False, "--keep-pdf", help="Keep the downloaded PDF."),
+    keep_pdf: bool = typer.Option(
+        False, "--keep-pdf", help="Keep the downloaded PDF next to the Markdown output."
+    ),
 ) -> None:
     """Download a paper and convert it to Markdown in one step."""
     try:

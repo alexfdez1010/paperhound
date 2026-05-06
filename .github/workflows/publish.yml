@@ -46,3 +46,8 @@ jobs:
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # Don't fail the workflow when the current version is already on
+          # PyPI. Lets us push to main without bumping pyproject.toml every
+          # time; only new versions actually get released.
+          skip-existing: true
