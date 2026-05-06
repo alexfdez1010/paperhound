@@ -478,11 +478,90 @@ def test_download_invokes_helpers(
 
 def test_convert_writes_to_stdout(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        cli_module, "convert_to_markdown", lambda src, output=None: "# fake markdown\n"
+        cli_module,
+        "convert_to_markdown",
+        lambda src, output=None, options=None: "# fake markdown\n",
     )
     result = runner.invoke(cli_module.app, ["convert", "/tmp/x.pdf"])
     assert result.exit_code == 0
     assert "# fake markdown" in result.stdout
+
+
+class TestConvertFlags:
+    """CLI tests for the new --with-figures, --equations, --tables flags."""
+
+    def _patch_convert(self, monkeypatch: pytest.MonkeyPatch):
+        """Patch convert_to_markdown to capture the ConversionOptions passed."""
+        captured: dict = {}
+
+        def fake_convert(src, output=None, options=None):
+            captured["options"] = options
+            if output is not None:
+                Path(output).write_text("# md\n", encoding="utf-8")
+            return "# md\n"
+
+        monkeypatch.setattr(cli_module, "convert_to_markdown", fake_convert)
+        return captured
+
+    def test_all_flags_wire_through(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        captured = self._patch_convert(monkeypatch)
+        output = tmp_path / "out.md"
+        result = runner.invoke(
+            cli_module.app,
+            [
+                "convert",
+                "/tmp/x.pdf",
+                "-o",
+                str(output),
+                "--with-figures",
+                "--equations",
+                "latex",
+                "--tables",
+                "html",
+            ],
+        )
+        assert result.exit_code == 0, result.stdout + result.stderr
+        opts = captured["options"]
+        assert opts is not None
+        assert opts.with_figures is True
+        assert opts.equations == "latex"
+        assert opts.tables == "html"
+
+    def test_defaults_are_backward_compatible(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured = self._patch_convert(monkeypatch)
+        result = runner.invoke(cli_module.app, ["convert", "/tmp/x.pdf"])
+        assert result.exit_code == 0
+        opts = captured["options"]
+        assert opts is not None
+        assert opts.with_figures is False
+        assert opts.equations == "inline"
+        assert opts.tables == "markdown"
+
+    def test_with_figures_without_output_exits_nonzero(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._patch_convert(monkeypatch)
+        result = runner.invoke(cli_module.app, ["convert", "/tmp/x.pdf", "--with-figures"])
+        assert result.exit_code != 0
+        assert "output" in (result.stdout + result.stderr).lower()
+
+    def test_invalid_equations_value_exits_nonzero(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._patch_convert(monkeypatch)
+        result = runner.invoke(cli_module.app, ["convert", "/tmp/x.pdf", "--equations", "mathml"])
+        assert result.exit_code != 0
+
+    def test_invalid_tables_value_exits_nonzero(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._patch_convert(monkeypatch)
+        result = runner.invoke(cli_module.app, ["convert", "/tmp/x.pdf", "--tables", "csv"])
+        assert result.exit_code != 0
 
 
 def test_get_pipeline_writes_markdown(

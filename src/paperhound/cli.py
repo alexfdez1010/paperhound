@@ -13,7 +13,7 @@ from rich.console import Console
 
 from paperhound import __version__
 from paperhound.citation_export import render as render_citation
-from paperhound.convert import convert_to_markdown
+from paperhound.convert import ConversionOptions, convert_to_markdown
 from paperhound.download import download_pdf, resolve_pdf_url
 from paperhound.errors import LibraryError, PaperhoundError, RerankError
 from paperhound.filtering import parse_year_range
@@ -121,6 +121,7 @@ HELP_EPILOG = (
     "  paperhound show 2401.12345 --format csljson\n"
     "  paperhound download 10.48550/arXiv.2401.12345 -o ./papers\n"
     "  paperhound convert paper.pdf -o paper.md\n"
+    "  paperhound convert paper.pdf -o paper.md --with-figures --equations latex --tables html\n"
     "  paperhound get 2401.12345 -o rag.md\n"
     "  paperhound add 2401.12345 --convert\n"
     "  paperhound list\n"
@@ -147,6 +148,9 @@ HELP_EPILOG = (
     "             Schema: paperhound.models.Paper (model_dump mode='json').\n"
     "MCP server:  paperhound mcp  (requires: pip install 'paperhound[mcp]').\n"
     "Rerank:      search --rerank  (requires: pip install 'paperhound[rerank]').\n"
+    "Convert:     --with-figures saves images to <stem>_assets/ (requires -o).\n"
+    "             --equations latex  preserves math as $...$ / $$...$$.\n"
+    "             --tables html      embeds <table> blocks instead of GFM tables.\n"
     "Docs:        https://github.com/alexfdez1010/paperhound"
 )
 
@@ -489,7 +493,10 @@ def download(
     epilog=(
         "Examples:\n\n\b\n"
         "  paperhound convert paper.pdf -o paper.md\n"
-        "  paperhound convert https://arxiv.org/pdf/2401.12345 > paper.md"
+        "  paperhound convert https://arxiv.org/pdf/2401.12345 > paper.md\n"
+        "  paperhound convert paper.pdf -o paper.md --with-figures\n"
+        "  paperhound convert paper.pdf -o paper.md --equations latex\n"
+        "  paperhound convert paper.pdf -o paper.md --tables html"
     ),
 )
 def convert(
@@ -497,10 +504,53 @@ def convert(
     output: Path | None = typer.Option(
         None, "--output", "-o", help="Markdown output path. Prints to stdout when omitted."
     ),
+    with_figures: bool = typer.Option(
+        False,
+        "--with-figures",
+        help=(
+            "Extract embedded figures alongside the Markdown. Images are saved to"
+            " <output_basename>_assets/ and referenced via Markdown image syntax."
+            " Requires --output."
+        ),
+    ),
+    equations: str = typer.Option(
+        "inline",
+        "--equations",
+        help=(
+            "Equation rendering mode. 'inline' (default): docling's default"
+            " inline text representation. 'latex': enable formula enrichment so"
+            " math is preserved as $...$ / $$...$$ LaTeX."
+        ),
+    ),
+    tables: str = typer.Option(
+        "markdown",
+        "--tables",
+        help=(
+            "Table output format. 'markdown' (default): GFM pipe tables."
+            " 'html': embed <table> blocks for better fidelity with irregular tables."
+        ),
+    ),
 ) -> None:
     """Convert a PDF or supported document to Markdown via docling."""
     try:
-        markdown = convert_to_markdown(source, output=output)
+        opts = ConversionOptions(
+            with_figures=with_figures,
+            equations=equations,  # type: ignore[arg-type]
+            tables=tables,  # type: ignore[arg-type]
+        )
+    except Exception as exc:
+        err_console.print(f"[red]error:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    if with_figures and output is None:
+        err_console.print(
+            "[red]error:[/red] --with-figures requires --output so that the"
+            " assets directory can be placed alongside the Markdown file."
+        )
+        raise typer.Exit(code=1)
+
+    try:
+        markdown = convert_to_markdown(source, output=output, options=opts)
     except PaperhoundError as exc:
         _exit_on_error(exc)
         return

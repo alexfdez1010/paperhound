@@ -152,10 +152,14 @@ paperhound download <identifier> -o <path-or-dir>
 ### Convert — PDF → Markdown via docling
 
 ```bash
-paperhound convert <path-or-url> [-o output.md]
+paperhound convert <path-or-url> [-o output.md] [--with-figures] [--equations inline|latex] [--tables markdown|html]
 ```
 
 - Without `-o`, the Markdown is written to stdout.
+- `--with-figures` — extract embedded figures to `<stem>_assets/` and add `![](...)` references. Requires `-o`.
+- `--equations latex` — enable formula enrichment; math is preserved as `$...$` / `$$...$$` LaTeX.
+- `--tables html` — embed raw `<table>` blocks for better fidelity with merged/irregular cells.
+- All three flags default to the original behaviour (no figures, inline equations, GFM tables).
 
 ### Get — download and convert in one step
 

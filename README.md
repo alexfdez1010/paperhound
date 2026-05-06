@@ -97,7 +97,7 @@ dblp_key,core_id}`, `sources[]`.
 | `paperhound search <query>` | Run a unified search. `--limit`, `--source arxiv\|openalex\|dblp\|crossref\|huggingface\|semantic_scholar\|core` (repeatable), `--year RANGE`, `--min-citations N`, `--venue STRING`, `--author STRING`, `--timeout`, `--json` (JSONL output), `--rerank` (embedding rerank; see below), `--rerank-model`. |
 | `paperhound show <id>` | Fetch a paper's metadata + abstract. `--format markdown\|bibtex\|ris\|csljson` (default `markdown`), `--json` (compact JSON; mutually exclusive with `--format`). |
 | `paperhound download <id> -o <path>` | Download a paper PDF. |
-| `paperhound convert <pdf> -o <md>` | Convert a PDF (or any docling-supported file/URL) to Markdown. |
+| `paperhound convert <pdf> -o <md>` | Convert a PDF (or any docling-supported file/URL) to Markdown. `--with-figures` saves embedded images to `<stem>_assets/` and references them in the output. `--equations latex` preserves math as `$...$`/`$$...$$`. `--tables html` embeds `<table>` blocks instead of GFM pipe tables. |
 | `paperhound get <id> -o <md>` | Download + convert in one step. `--keep-pdf` to keep the PDF. |
 | `paperhound refs <id>` | List works the paper cites (its references). `--depth 1\|2`, `--limit N`, `--source openalex\|semantic_scholar`, `--json`. |
 | `paperhound cited-by <id>` | List works that cite the paper. Same flags as `refs`. |
@@ -109,6 +109,31 @@ dblp_key,core_id}`, `sources[]`.
 | `paperhound version` | Print the installed version. |
 
 Run `paperhound <command> --help` for full options.
+
+## Conversion options
+
+`paperhound convert` (and the `get` / `add --convert` pipeline) accepts three
+flags that control how the PDF is rendered to Markdown:
+
+| Flag | Values | Default | Description |
+|---|---|---|---|
+| `--with-figures` | — | off | Extract embedded figures to `<stem>_assets/` and embed `![](...)` references. Requires `--output`. |
+| `--equations` | `inline`, `latex` | `inline` | `latex` enables formula enrichment — math is preserved as `$...$` / `$$...$$` LaTeX (uses docling's `do_formula_enrichment` VLM; slightly slower). |
+| `--tables` | `markdown`, `html` | `markdown` | `html` embeds raw `<table>` blocks for better fidelity with merged/irregular cells. |
+
+```bash
+# Extract figures, use LaTeX math, embed HTML tables
+paperhound convert paper.pdf -o paper.md --with-figures --equations latex --tables html
+
+# Just preserve LaTeX math
+paperhound convert paper.pdf -o paper.md --equations latex
+
+# HTML tables only, no figure extraction
+paperhound convert paper.pdf -o paper.md --tables html
+```
+
+All three flags default to the original behaviour, so existing pipelines are
+unaffected.
 
 ## Filters
 
