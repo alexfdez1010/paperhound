@@ -109,11 +109,19 @@ paperhound search "<query>" [--limit N] [--year-min YYYY] [--year-max YYYY] [--s
 ### Show — abstract + metadata for a single paper
 
 ```bash
-paperhound show <identifier> [--json]
+paperhound show <identifier> [--json] [--format markdown|bibtex|ris|csljson]
 ```
 
 - `<identifier>` accepts: arXiv id (`2401.12345`, `cs.AI/0301001`),
   DOI (`10.1234/foo.bar`), Semantic Scholar id (40-char hex), or any paper URL.
+- `--format` controls the output format (default `markdown`):
+  - `markdown` — rich terminal view (title, authors, abstract, identifiers).
+  - `bibtex` — `@article`/`@inproceedings`/`@misc` entry; cite key is
+    `<lastNameLower><year><firstSignificantWord>`; LaTeX special chars escaped.
+  - `ris` — RIS block (`TY`, `AU`, `TI`, `AB`, `PY`, `DO`, `UR`, `ER`);
+    compatible with Zotero, Mendeley, EndNoteX.
+  - `csljson` — single-element CSL-JSON array; compatible with Pandoc and
+    citation processors.
 
 ### Download — fetch the PDF
 

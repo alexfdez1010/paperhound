@@ -12,6 +12,7 @@ import typer
 from rich.console import Console
 
 from paperhound import __version__
+from paperhound.citation_export import render as render_citation
 from paperhound.convert import convert_to_markdown
 from paperhound.download import download_pdf, resolve_pdf_url
 from paperhound.errors import LibraryError, PaperhoundError
@@ -103,6 +104,9 @@ HELP_EPILOG = (
     "\b\n"
     '  paperhound search "retrieval augmented generation" -n 5\n'
     "  paperhound show 2401.12345\n"
+    "  paperhound show 2401.12345 --format bibtex\n"
+    "  paperhound show 2401.12345 --format ris\n"
+    "  paperhound show 2401.12345 --format csljson\n"
     "  paperhound download 10.48550/arXiv.2401.12345 -o ./papers\n"
     "  paperhound convert paper.pdf -o paper.md\n"
     "  paperhound get 2401.12345 -o rag.md\n"
@@ -277,14 +281,29 @@ def search(
     epilog=(
         "Examples:\n\n\b\n"
         "  paperhound show 2401.12345\n"
+        "  paperhound show 2401.12345 --format bibtex\n"
+        "  paperhound show 2401.12345 --format ris\n"
+        "  paperhound show 2401.12345 --format csljson\n"
         "  paperhound show 10.48550/arXiv.2401.12345 --json"
     ),
 )
 def show(
     identifier: str = typer.Argument(..., help="arXiv id, DOI, Semantic Scholar id, or paper URL."),
     json_output: bool = typer.Option(False, "--json", help="Emit JSON instead of formatted text."),
+    fmt: str = typer.Option(
+        "markdown",
+        "--format",
+        "-f",
+        help=("Output format. One of: markdown (default, rich text), bibtex, ris, csljson."),
+    ),
 ) -> None:
     """Fetch a paper's metadata and abstract."""
+    _VALID_FORMATS: tuple[str, ...] = ("markdown", "bibtex", "ris", "csljson")
+    if fmt not in _VALID_FORMATS:
+        raise typer.BadParameter(
+            f"Invalid format {fmt!r}. Choose from: {', '.join(_VALID_FORMATS)}."
+        )
+
     aggregator = _build_aggregator()
     try:
         paper = aggregator.get(identifier)
@@ -298,6 +317,9 @@ def show(
 
     if json_output:
         sys.stdout.write(paper.model_dump_json(indent=2) + "\n")
+    elif fmt != "markdown":
+        output = render_citation(paper, fmt)  # type: ignore[arg-type]
+        sys.stdout.write(output or "")
     else:
         render_paper_detail(paper, console)
 

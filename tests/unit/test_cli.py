@@ -181,6 +181,61 @@ def test_show_not_found(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> N
     assert result.exit_code == 1
 
 
+class TestShowFormat:
+    """CLI tests for ``paperhound show --format``."""
+
+    def _patch(self, monkeypatch: pytest.MonkeyPatch, paper: Paper) -> None:
+        monkeypatch.setattr(
+            cli_module,
+            "_build_aggregator",
+            lambda *args, **kwargs: FakeAggregator([], lookup=paper),
+        )
+
+    def test_format_bibtex_exits_zero_and_contains_at(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch, fake_paper: Paper
+    ) -> None:
+        self._patch(monkeypatch, fake_paper)
+        result = runner.invoke(cli_module.app, ["show", "2401.12345", "--format", "bibtex"])
+        assert result.exit_code == 0, result.output
+        assert "@" in result.stdout
+
+    def test_format_ris_contains_ty_and_er(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch, fake_paper: Paper
+    ) -> None:
+        self._patch(monkeypatch, fake_paper)
+        result = runner.invoke(cli_module.app, ["show", "2401.12345", "--format", "ris"])
+        assert result.exit_code == 0, result.output
+        assert "TY  - " in result.stdout
+        assert "ER  -" in result.stdout
+
+    def test_format_csljson_parses_as_json(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch, fake_paper: Paper
+    ) -> None:
+        self._patch(monkeypatch, fake_paper)
+        result = runner.invoke(cli_module.app, ["show", "2401.12345", "--format", "csljson"])
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.stdout)
+        assert isinstance(data, list)
+        assert len(data) == 1
+
+    def test_format_markdown_is_default(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch, fake_paper: Paper
+    ) -> None:
+        self._patch(monkeypatch, fake_paper)
+        result = runner.invoke(cli_module.app, ["show", "2401.12345"])
+        assert result.exit_code == 0
+        assert "Abstract" in result.stdout
+
+    def test_invalid_format_exits_nonzero(
+        self, runner: CliRunner, monkeypatch: pytest.MonkeyPatch, fake_paper: Paper
+    ) -> None:
+        self._patch(monkeypatch, fake_paper)
+        result = runner.invoke(cli_module.app, ["show", "2401.12345", "--format", "endnote"])
+        assert result.exit_code != 0
+        msg = (result.stdout + result.stderr).lower()
+        assert "invalid" in msg or "format" in msg or "choose" in msg
+
+
 def test_download_invokes_helpers(
     runner: CliRunner, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

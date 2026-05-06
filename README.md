@@ -83,7 +83,7 @@ paperhound show 1706.03762 --json
 | Command | Description |
 |---|---|
 | `paperhound search <query>` | Run a unified search. `--limit`, `--source arxiv\|openalex\|dblp\|crossref\|huggingface\|semantic_scholar\|core` (repeatable), `--year-min`, `--year-max`, `--timeout`, `--json`. |
-| `paperhound show <id>` | Fetch a paper's metadata + abstract. |
+| `paperhound show <id>` | Fetch a paper's metadata + abstract. `--format markdown\|bibtex\|ris\|csljson` (default `markdown`). |
 | `paperhound download <id> -o <path>` | Download a paper PDF. |
 | `paperhound convert <pdf> -o <md>` | Convert a PDF (or any docling-supported file/URL) to Markdown. |
 | `paperhound get <id> -o <md>` | Download + convert in one step. `--keep-pdf` to keep the PDF. |
@@ -97,6 +97,26 @@ paperhound show 1706.03762 --json
 | `paperhound version` | Print the installed version. |
 
 Run `paperhound <command> --help` for full options.
+
+## Export formats
+
+`paperhound show` can export a paper's metadata in four formats:
+
+```bash
+# Rich terminal view (default)
+paperhound show 1706.03762
+
+# BibTeX — paste into your .bib file
+paperhound show 1706.03762 --format bibtex
+
+# RIS — compatible with Zotero, Mendeley, EndNote
+paperhound show 1706.03762 --format ris
+
+# CSL-JSON — machine-readable, compatible with Pandoc and citation processors
+paperhound show 1706.03762 --format csljson
+```
+
+BibTeX cite keys are derived deterministically as `<firstAuthorLastName><year><firstSignificantTitleWord>` (accents stripped, lowercased). LaTeX special characters (`&`, `%`, `$`, `_`, etc.) are escaped automatically.
 
 ## Local library
 
