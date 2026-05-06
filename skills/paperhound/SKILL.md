@@ -92,7 +92,7 @@ Typical agent workflow to build a local corpus:
 ### Search — unified across providers
 
 ```bash
-paperhound search "<query>" [--limit N] [--year-min YYYY] [--year-max YYYY] [--source arxiv|openalex|dblp|crossref|huggingface|semantic_scholar|core] [--timeout SECONDS] [--json]
+paperhound search "<query>" [--limit N] [--year-min YYYY] [--year-max YYYY] [--source arxiv|openalex|dblp|crossref|huggingface|semantic_scholar|core] [--timeout SECONDS] [--json] [--rerank] [--rerank-model NAME]
 ```
 
 - Default `--limit` is 10. Cap it (e.g. `-n 5`) when the user asks for "a few".
@@ -107,6 +107,9 @@ paperhound search "<query>" [--limit N] [--year-min YYYY] [--year-max YYYY] [--s
   `year`, `venue`, `url`, `pdf_url`, `citation_count`,
   `identifiers.{arxiv_id,doi,semantic_scholar_id,openalex_id,dblp_key,core_id}`,
   `sources[]`.
+- `--rerank` re-sorts results by embedding similarity (query vs. title+abstract).
+  Requires `pip install 'paperhound[rerank]'`. Default model:
+  `sentence-transformers/all-MiniLM-L6-v2`. Override with `--rerank-model NAME`.
 
 ### Show — abstract + metadata for a single paper
 

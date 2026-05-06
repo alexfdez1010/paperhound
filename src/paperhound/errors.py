@@ -23,3 +23,7 @@ class ConversionError(PaperhoundError):
 
 class LibraryError(PaperhoundError):
     """Raised when a local-library operation fails (schema mismatch, missing entry, …)."""
+
+
+class RerankError(PaperhoundError):
+    """Raised when embedding rerank fails (missing dep, model load error, …)."""

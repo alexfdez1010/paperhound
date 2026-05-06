@@ -15,7 +15,7 @@ from paperhound import __version__
 from paperhound.citation_export import render as render_citation
 from paperhound.convert import convert_to_markdown
 from paperhound.download import download_pdf, resolve_pdf_url
-from paperhound.errors import LibraryError, PaperhoundError
+from paperhound.errors import LibraryError, PaperhoundError, RerankError
 from paperhound.identifiers import IdentifierKind, detect
 from paperhound.library import Library, _canonical_id, _library_dir, _safe_filename
 from paperhound.output import (
@@ -138,6 +138,7 @@ HELP_EPILOG = (
     "             show --json emits a single compact JSON object.\n"
     "             Schema: paperhound.models.Paper (model_dump mode='json').\n"
     "MCP server:  paperhound mcp  (requires: pip install 'paperhound[mcp]').\n"
+    "Rerank:      search --rerank  (requires: pip install 'paperhound[rerank]').\n"
     "Docs:        https://github.com/alexfdez1010/paperhound"
 )
 
@@ -221,12 +222,19 @@ def version() -> None:
     console.print(__version__)
 
 
+_RERANK_CANDIDATE_MULTIPLIER = 3
+_RERANK_CANDIDATE_CAP = 50
+
+
 @app.command(
     epilog=(
         "Examples:\n\n\b\n"
         '  paperhound search "diffusion models" -n 20\n'
         '  paperhound search "graph neural networks" -s arxiv --year-min 2023\n'
-        '  paperhound search "llm agents" --json | jq .'
+        '  paperhound search "llm agents" --json | jq .\n'
+        '  paperhound search "transformers" --rerank\n'
+        '  paperhound search "vision language" --rerank'
+        " --rerank-model sentence-transformers/all-MiniLM-L6-v2"
     ),
 )
 def search(
@@ -260,16 +268,37 @@ def search(
         ),
     ),
     json_output: bool = typer.Option(False, "--json", help="Emit JSON instead of a Rich table."),
+    do_rerank: bool = typer.Option(
+        False,
+        "--rerank",
+        help=(
+            "Rerank results by embedding similarity (query vs. title+abstract)."
+            " Requires: pip install 'paperhound[rerank]'."
+        ),
+    ),
+    rerank_model: str = typer.Option(
+        "sentence-transformers/all-MiniLM-L6-v2",
+        "--rerank-model",
+        help="SentenceTransformer model name used for reranking (default: all-MiniLM-L6-v2).",
+    ),
 ) -> None:
     """Search papers across providers and print merged, deduplicated results."""
     if not query.strip():
         raise typer.BadParameter("Query must not be empty.")
+
+    # When reranking, fetch a wider candidate pool so the reranker has more
+    # material to work with, then slice down to the requested limit afterward.
+    if do_rerank:
+        candidate_limit = min(limit * _RERANK_CANDIDATE_MULTIPLIER, _RERANK_CANDIDATE_CAP)
+    else:
+        candidate_limit = limit
+
     aggregator = _build_aggregator(source, timeout=timeout)
     try:
         papers = aggregator.search(
             SearchQuery(
                 text=query,
-                limit=limit,
+                limit=candidate_limit,
                 year_min=year_min,
                 year_max=year_max,
             )
@@ -277,6 +306,18 @@ def search(
     except PaperhoundError as exc:
         _exit_on_error(exc)
         return
+
+    if do_rerank and papers:
+        from paperhound import rerank as rerank_mod
+
+        try:
+            papers = rerank_mod.rerank(query, papers, rerank_model)
+        except RerankError as exc:
+            err_console.print(f"[red]error:[/red] {exc}")
+            raise typer.Exit(code=1) from exc
+
+    # Truncate to requested limit after optional reranking.
+    papers = papers[:limit]
 
     if not papers:
         err_console.print("[yellow]No results.[/yellow]")

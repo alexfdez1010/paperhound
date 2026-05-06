@@ -854,3 +854,178 @@ class TestCitationCommands:
         )
         result = runner.invoke(cli_module.app, ["refs", "1706.03762"])
         assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# --rerank flag tests
+# ---------------------------------------------------------------------------
+
+
+class TestSearchRerank:
+    """CLI tests for the ``search --rerank`` flag."""
+
+    def _patch_aggregator(self, monkeypatch: pytest.MonkeyPatch, papers: list[Paper]) -> None:
+        monkeypatch.setattr(cli_module, "_build_aggregator", lambda *a, **k: FakeAggregator(papers))
+
+    def test_rerank_flag_calls_rerank_function(
+        self,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_paper: Paper,
+    ) -> None:
+        """When --rerank is passed, paperhound.rerank.rerank should be called."""
+        import paperhound.rerank as rerank_mod
+
+        calls: list[dict] = []
+
+        def fake_rerank(query, papers, model_name=None, **kwargs):
+            calls.append({"query": query, "n": len(papers), "model_name": model_name})
+            return list(papers)
+
+        self._patch_aggregator(monkeypatch, [fake_paper])
+        monkeypatch.setattr(rerank_mod, "rerank", fake_rerank)
+
+        result = runner.invoke(cli_module.app, ["search", "transformers", "--rerank"])
+        assert result.exit_code == 0, result.output
+        assert len(calls) == 1
+        assert calls[0]["query"] == "transformers"
+
+    def test_rerank_model_forwarded(
+        self,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_paper: Paper,
+    ) -> None:
+        """--rerank-model value should be forwarded to rerank()."""
+        import paperhound.rerank as rerank_mod
+
+        calls: list[str | None] = []
+
+        def fake_rerank(query, papers, model_name=None, **kwargs):
+            calls.append(model_name)
+            return list(papers)
+
+        self._patch_aggregator(monkeypatch, [fake_paper])
+        monkeypatch.setattr(rerank_mod, "rerank", fake_rerank)
+
+        result = runner.invoke(
+            cli_module.app,
+            ["search", "transformers", "--rerank", "--rerank-model", "custom/model"],
+        )
+        assert result.exit_code == 0, result.output
+        assert calls[0] == "custom/model"
+
+    def test_rerank_without_flag_does_not_call_rerank(
+        self,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_paper: Paper,
+    ) -> None:
+        """Without --rerank, the rerank function must not be called."""
+        import paperhound.rerank as rerank_mod
+
+        called: list[bool] = []
+
+        def fake_rerank(*a, **k):
+            called.append(True)
+            return list(a[1])
+
+        self._patch_aggregator(monkeypatch, [fake_paper])
+        monkeypatch.setattr(rerank_mod, "rerank", fake_rerank)
+
+        result = runner.invoke(cli_module.app, ["search", "transformers"])
+        assert result.exit_code == 0
+        assert not called
+
+    def test_rerank_missing_dep_exits_nonzero_with_helpful_message(
+        self,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_paper: Paper,
+    ) -> None:
+        """When rerank() raises RerankError, the CLI exits != 0 with a clear message."""
+        import paperhound.rerank as rerank_mod
+        from paperhound.errors import RerankError
+
+        def fake_rerank(*a, **k):
+            raise RerankError(
+                "Rerank requires sentence-transformers. "
+                "Install with: pip install 'paperhound[rerank]'"
+            )
+
+        self._patch_aggregator(monkeypatch, [fake_paper])
+        monkeypatch.setattr(rerank_mod, "rerank", fake_rerank)
+
+        result = runner.invoke(cli_module.app, ["search", "transformers", "--rerank"])
+        assert result.exit_code != 0
+        combined = result.stdout + result.stderr
+        assert "paperhound[rerank]" in combined or "sentence-transformers" in combined
+
+    def test_rerank_wider_candidate_pool(
+        self,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_paper: Paper,
+    ) -> None:
+        """With --rerank -n 2, aggregator should be asked for more than 2 papers."""
+        import paperhound.rerank as rerank_mod
+
+        aggregator_limits: list[int] = []
+
+        class CapturingAggregator:
+            def search(self, query) -> list[Paper]:
+                aggregator_limits.append(query.limit)
+                return [fake_paper]
+
+            def get(self, _id):
+                return None
+
+        monkeypatch.setattr(cli_module, "_build_aggregator", lambda *a, **k: CapturingAggregator())
+        monkeypatch.setattr(
+            rerank_mod, "rerank", lambda q, papers, model_name=None, **kw: list(papers)
+        )
+
+        result = runner.invoke(cli_module.app, ["search", "transformers", "--rerank", "-n", "2"])
+        assert result.exit_code == 0, result.output
+        assert aggregator_limits[0] > 2, (
+            "aggregator should receive a wider limit when --rerank is set"
+        )
+
+    def test_rerank_result_truncated_to_limit(
+        self,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """After reranking, results are sliced to --limit."""
+        import paperhound.rerank as rerank_mod
+
+        def _make_numbered_paper(i: int) -> Paper:
+            return Paper(
+                title=f"Paper {i}",
+                abstract="Abstract",
+                identifiers=PaperIdentifier(arxiv_id=f"000{i}.00000"),
+                sources=["arxiv"],
+            )
+
+        papers_list = [_make_numbered_paper(i) for i in range(6)]
+
+        class BigAggregator:
+            def search(self, query) -> list[Paper]:
+                return papers_list
+
+            def get(self, _id):
+                return None
+
+        monkeypatch.setattr(cli_module, "_build_aggregator", lambda *a, **k: BigAggregator())
+        monkeypatch.setattr(
+            rerank_mod, "rerank", lambda q, papers, model_name=None, **kw: list(papers)
+        )
+
+        result = runner.invoke(
+            cli_module.app,
+            ["search", "transformers", "--rerank", "-n", "3"],
+        )
+        assert result.exit_code == 0, result.output
+        # Table has 3 data rows: check that at most 3 paper titles appear
+        # (Paper 0, Paper 1, Paper 2)
+        assert "Paper 5" not in result.stdout

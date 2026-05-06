@@ -1,6 +1,6 @@
 [project]
 name = "paperhound"
-version = "0.4.7"
+version = "0.4.8"
 description = "CLI to search, download, and convert academic papers (arXiv, OpenAlex, DBLP, Crossref, Hugging Face Papers, Semantic Scholar, CORE) into Markdown — built for AI/ML researchers."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -61,6 +61,7 @@ dev = [
     "ruff>=0.6.0",
 ]
 mcp = ["mcp>=1.0.0"]
+rerank = ["sentence-transformers>=2.2.0"]
 
 [build-system]
 requires = ["hatchling"]

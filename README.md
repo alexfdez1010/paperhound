@@ -94,7 +94,7 @@ dblp_key,core_id}`, `sources[]`.
 
 | Command | Description |
 |---|---|
-| `paperhound search <query>` | Run a unified search. `--limit`, `--source arxiv\|openalex\|dblp\|crossref\|huggingface\|semantic_scholar\|core` (repeatable), `--year-min`, `--year-max`, `--timeout`, `--json` (JSONL output). |
+| `paperhound search <query>` | Run a unified search. `--limit`, `--source arxiv\|openalex\|dblp\|crossref\|huggingface\|semantic_scholar\|core` (repeatable), `--year-min`, `--year-max`, `--timeout`, `--json` (JSONL output), `--rerank` (embedding rerank; see below), `--rerank-model`. |
 | `paperhound show <id>` | Fetch a paper's metadata + abstract. `--format markdown\|bibtex\|ris\|csljson` (default `markdown`), `--json` (compact JSON; mutually exclusive with `--format`). |
 | `paperhound download <id> -o <path>` | Download a paper PDF. |
 | `paperhound convert <pdf> -o <md>` | Convert a PDF (or any docling-supported file/URL) to Markdown. |
@@ -185,6 +185,40 @@ triggered when OpenAlex returns nothing or errors). Results are deduplicated
 by arXiv id / DOI / title before being returned. At `--depth 2`, total fetched
 is capped at `limit * 2` and a small pause (0.1 s) is inserted between hops to
 stay in the polite API pool.
+
+## Rerank
+
+Add `--rerank` to any `paperhound search` call to re-sort results by embedding
+similarity between the query and each candidate's title + abstract. This can
+surface more relevant papers when the round-robin merge returns noisier results
+from some providers.
+
+```bash
+# Rerank using the default model (all-MiniLM-L6-v2, ~22 MB)
+paperhound search "vision language models" --rerank
+
+# Use a different SentenceTransformer model
+paperhound search "graph neural networks" --rerank \
+  --rerank-model sentence-transformers/all-mpnet-base-v2
+```
+
+### Installation
+
+```bash
+pip install 'paperhound[rerank]'
+```
+
+`--rerank` exits with a clear error if `sentence-transformers` is not installed.
+
+### How it works
+
+1. The aggregator fetches up to `limit * 3` candidates (capped at 50).
+2. Each candidate's text (`title + abstract`) is embedded alongside the query
+   using the chosen SentenceTransformer model (cached per process).
+3. Candidates are sorted by cosine similarity (descending).
+4. Papers with neither a title nor an abstract keep their merge-order rank and
+   are placed at the end.
+5. The top `--limit` results are returned.
 
 ## MCP server
 
