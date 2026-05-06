@@ -60,7 +60,7 @@ def test_search_passes_year_range() -> None:
 @respx.mock
 def test_search_raises_provider_error_on_5xx() -> None:
     respx.get(f"{S2_BASE_URL}/paper/search").mock(return_value=httpx.Response(500))
-    with SemanticScholarProvider() as provider, pytest.raises(ProviderError):
+    with SemanticScholarProvider(max_retries=0) as provider, pytest.raises(ProviderError):
         provider.search(SearchQuery(text="x", limit=1))
 
 

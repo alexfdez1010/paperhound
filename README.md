@@ -3,14 +3,18 @@
 > **paperhound** — sniff out academic papers from the command line.
 
 A small, fast CLI for AI/ML researchers who want a single tool to **search**,
-**inspect**, **download**, and **convert to Markdown** papers from arXiv and
-Semantic Scholar. Conversion is powered by [docling](https://github.com/docling-project/docling),
-so the resulting Markdown is good enough to feed straight into an LLM context.
+**inspect**, **download**, and **convert to Markdown** papers from many academic
+sources at once. Conversion is powered by
+[docling](https://github.com/docling-project/docling), so the resulting Markdown
+is good enough to feed straight into an LLM context.
 
 ## Features
 
-- 🔎 **Unified search** — one query, all backends. arXiv and Semantic Scholar
-  are queried in parallel and the results are merged and deduplicated.
+- 🔎 **Unified search** — one query, many backends. arXiv, OpenAlex, DBLP,
+  Crossref and Hugging Face Papers (and optionally Semantic Scholar / CORE) are
+  queried in parallel with a 10-second budget; results are merged and
+  deduplicated. Slow providers are dropped silently — the CLI returns whatever
+  came back in time.
 - 📄 **Inspect before downloading** — `paperhound show <id>` prints the
   abstract and metadata so you can decide if it's worth a download.
 - ⬇️ **Download by identifier** — arXiv id, DOI, Semantic Scholar paper id, or
@@ -69,7 +73,7 @@ paperhound show 1706.03762 --json
 
 | Command | Description |
 |---|---|
-| `paperhound search <query>` | Run a unified search. `--limit`, `--source arxiv\|semantic_scholar`, `--year-min`, `--year-max`, `--json`. |
+| `paperhound search <query>` | Run a unified search. `--limit`, `--source arxiv\|openalex\|dblp\|crossref\|huggingface\|semantic_scholar\|core` (repeatable), `--year-min`, `--year-max`, `--timeout`, `--json`. |
 | `paperhound show <id>` | Fetch a paper's metadata + abstract. |
 | `paperhound download <id> -o <path>` | Download a paper PDF. |
 | `paperhound convert <pdf> -o <md>` | Convert a PDF (or any docling-supported file/URL) to Markdown. |
@@ -92,7 +96,29 @@ paperhound accepts whatever you have on hand:
 
 | Env var | Purpose |
 |---|---|
-| `SEMANTIC_SCHOLAR_API_KEY` | Optional. Every Semantic Scholar Graph API endpoint we use (`/paper/search`, `/paper/{paper_id}`) is reachable anonymously, but the unauthenticated quota is shared globally and 429s are common; the provider retries them automatically. Set this to your own key for steadier throughput. |
+| `OPENALEX_MAILTO` | Optional. Adds your email to OpenAlex requests so they land in the polite pool (better rate limits). |
+| `CROSSREF_MAILTO` | Optional. Same idea for Crossref's polite pool. |
+| `CORE_API_KEY` | Required to enable the CORE provider. Without a key the provider reports unavailable and the aggregator skips it silently. Get a free key at <https://core.ac.uk/services/api>. |
+| `SEMANTIC_SCHOLAR_API_KEY` | Optional. Semantic Scholar's anonymous quota is shared globally and 429s are common; the provider retries with exponential backoff. Set this to your own key for steadier throughput. |
+
+> **Note on Papers with Code.** The `paperswithcode.com/api` endpoint was
+> retired in 2025 (Hugging Face acquired the project) and now redirects to
+> `huggingface.co/papers`. paperhound therefore reports the `paperswithcode`
+> source as unavailable by default and queries Hugging Face Papers instead via
+> the `huggingface` source. The PwC provider class is still in the registry
+> for completeness; pass `--source paperswithcode` only if you have a private
+> mirror.
+
+### Adding a new provider
+
+`paperhound.search` is a registry of provider factories. To add a new source:
+
+1. Create `src/paperhound/search/<name>.py` with a class subclassing
+   `SearchProvider`. Declare its `capabilities` (`TEXT_SEARCH`, `ID_LOOKUP`,
+   `OPEN_ACCESS_PDF`) and override `available()` if it needs an API key.
+2. Add unit tests in `tests/unit/test_<name>.py` that mock HTTP with `respx`.
+3. Register it in `src/paperhound/search/__init__.py` with one
+   `register("name", Factory)` call. Done — the CLI picks it up automatically.
 
 ## Use it from agents
 
@@ -124,10 +150,10 @@ make check              # lint + format check + unit tests (run before pushing)
 ```
 
 Unit tests use `respx` to mock HTTP, so they never touch the network.
-Integration tests under `tests/integration/` always hit the real arXiv and
-Semantic Scholar APIs — no env-var gate, no mocks. The `SemanticScholarProvider`
-retries 429s with exponential backoff so the S2 suite is robust to the public
-shared rate limit; export `SEMANTIC_SCHOLAR_API_KEY` only if you want faster
+Integration tests under `tests/integration/` always hit the real provider APIs
+(arXiv, OpenAlex, DBLP, Crossref, Hugging Face Papers, Semantic Scholar) — no
+env-var gate, no mocks. The `SemanticScholarProvider` retries 429s with
+exponential backoff; export `SEMANTIC_SCHOLAR_API_KEY` only if you want faster
 runs.
 
 ## Releasing to PyPI

@@ -51,14 +51,18 @@ def test_version(runner: CliRunner) -> None:
 def test_search_table(
     runner: CliRunner, monkeypatch: pytest.MonkeyPatch, fake_paper: Paper
 ) -> None:
-    monkeypatch.setattr(cli_module, "_build_aggregator", lambda *_: FakeAggregator([fake_paper]))
+    monkeypatch.setattr(
+        cli_module, "_build_aggregator", lambda *args, **kwargs: FakeAggregator([fake_paper])
+    )
     result = runner.invoke(cli_module.app, ["search", "transformers"])
     assert result.exit_code == 0
     assert "A Cool Paper" in result.stdout
 
 
 def test_search_json(runner: CliRunner, monkeypatch: pytest.MonkeyPatch, fake_paper: Paper) -> None:
-    monkeypatch.setattr(cli_module, "_build_aggregator", lambda *_: FakeAggregator([fake_paper]))
+    monkeypatch.setattr(
+        cli_module, "_build_aggregator", lambda *args, **kwargs: FakeAggregator([fake_paper])
+    )
     result = runner.invoke(cli_module.app, ["search", "transformers", "--json"])
     assert result.exit_code == 0
     data = json.loads(result.stdout)
@@ -66,7 +70,7 @@ def test_search_json(runner: CliRunner, monkeypatch: pytest.MonkeyPatch, fake_pa
 
 
 def test_search_no_results(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(cli_module, "_build_aggregator", lambda *_: FakeAggregator([]))
+    monkeypatch.setattr(cli_module, "_build_aggregator", lambda *args, **kwargs: FakeAggregator([]))
     result = runner.invoke(cli_module.app, ["search", "xyz"])
     assert result.exit_code == 0
     assert "No results" in result.stderr
@@ -76,7 +80,9 @@ def test_show_prints_abstract(
     runner: CliRunner, monkeypatch: pytest.MonkeyPatch, fake_paper: Paper
 ) -> None:
     monkeypatch.setattr(
-        cli_module, "_build_aggregator", lambda *_: FakeAggregator([], lookup=fake_paper)
+        cli_module,
+        "_build_aggregator",
+        lambda *args, **kwargs: FakeAggregator([], lookup=fake_paper),
     )
     result = runner.invoke(cli_module.app, ["show", "2401.12345"])
     assert result.exit_code == 0
@@ -84,7 +90,9 @@ def test_show_prints_abstract(
 
 
 def test_show_not_found(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(cli_module, "_build_aggregator", lambda *_: FakeAggregator([], lookup=None))
+    monkeypatch.setattr(
+        cli_module, "_build_aggregator", lambda *args, **kwargs: FakeAggregator([], lookup=None)
+    )
     result = runner.invoke(cli_module.app, ["show", "2401.12345"])
     assert result.exit_code == 1
 

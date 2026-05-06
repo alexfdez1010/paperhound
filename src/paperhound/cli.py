@@ -16,10 +16,24 @@ from paperhound.errors import PaperhoundError
 from paperhound.identifiers import IdentifierKind, detect
 from paperhound.output import papers_to_json, render_paper_detail, render_table
 from paperhound.search import (
-    ArxivProvider,
+    DEFAULT_TIMEOUT,
     SearchAggregator,
     SearchQuery,
-    SemanticScholarProvider,
+    build,
+    names,
+    resolve,
+)
+
+# Providers enabled by default. CORE is opt-in (requires CORE_API_KEY),
+# Semantic Scholar is currently rate-limited / 403 for many keys, and
+# Papers with Code is defunct (the API was decommissioned in 2025); all three
+# stay registered but off the default list — opt in via ``--source``.
+DEFAULT_SOURCES: tuple[str, ...] = (
+    "arxiv",
+    "openalex",
+    "dblp",
+    "crossref",
+    "huggingface",
 )
 
 # Click's `\b` marker (on its own line, with blank lines around the paragraph)
@@ -36,7 +50,11 @@ HELP_EPILOG = (
     "  paperhound get 2401.12345 -o rag.md\n"
     "\n"
     "\b\n"
-    "Sources:     arxiv, semantic_scholar (alias: s2). Default: both.\n"
+    "Sources:     arxiv, openalex, dblp, crossref, huggingface (alias: hf),\n"
+    "             semantic_scholar (alias: s2), core, paperswithcode\n"
+    "             (defunct since 2025). Defaults to arxiv + openalex + dblp +\n"
+    "             crossref + huggingface (parallel, 10s budget; partial\n"
+    "             results returned on timeout).\n"
     "Identifiers: arXiv id (2401.12345), DOI, Semantic Scholar id, or paper URL.\n"
     "Docs:        https://github.com/alexfdez1010/paperhound"
 )
@@ -48,7 +66,9 @@ app = typer.Typer(
     rich_markup_mode=None,
     help=(
         "Search, download, and convert academic papers from the command line.\n\n"
-        "Aggregates arXiv and Semantic Scholar; converts PDFs to Markdown via docling."
+        "Aggregates arXiv, OpenAlex, DBLP, Crossref, Papers with Code"
+        " (and optionally Semantic Scholar / CORE) in parallel, then converts"
+        " PDFs to Markdown via docling."
     ),
     epilog=HELP_EPILOG,
     context_settings={"help_option_names": ["-h", "--help"]},
@@ -64,16 +84,23 @@ def _version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
-def _build_aggregator(sources: list[str] | None = None) -> SearchAggregator:
-    chosen = {s.lower() for s in sources} if sources else {"arxiv", "semantic_scholar"}
-    providers = []
-    if "arxiv" in chosen:
-        providers.append(ArxivProvider())
-    if "semantic_scholar" in chosen or "s2" in chosen:
-        providers.append(SemanticScholarProvider())
-    if not providers:
-        raise typer.BadParameter(f"Unknown sources: {sources!r}")
-    return SearchAggregator(providers)
+def _build_aggregator(
+    sources: list[str] | None = None, timeout: float = DEFAULT_TIMEOUT
+) -> SearchAggregator:
+    requested = list(sources) if sources else list(DEFAULT_SOURCES)
+    canonical: list[str] = []
+    seen: set[str] = set()
+    for raw in requested:
+        try:
+            name = resolve(raw)
+        except KeyError as exc:
+            valid = ", ".join(names())
+            raise typer.BadParameter(f"Unknown source: {raw!r}. Valid: {valid}") from exc
+        if name not in seen:
+            seen.add(name)
+            canonical.append(name)
+    providers = [build(n) for n in canonical]
+    return SearchAggregator(providers, timeout=timeout)
 
 
 def _exit_on_error(exc: Exception) -> None:
@@ -123,8 +150,10 @@ def search(
         "--source",
         "-s",
         help=(
-            "Restrict to a provider. Choices: arxiv, semantic_scholar (alias: s2). "
-            "Repeatable; default queries all providers."
+            "Restrict to a provider. Choices: arxiv, openalex, dblp, crossref,"
+            " huggingface (alias: hf), semantic_scholar (alias: s2), core."
+            " Repeatable; default = arxiv + openalex + dblp + crossref +"
+            " huggingface."
         ),
     ),
     year_min: int | None = typer.Option(
@@ -133,10 +162,18 @@ def search(
     year_max: int | None = typer.Option(
         None, "--year-max", help="Latest publication year (inclusive)."
     ),
+    timeout: float = typer.Option(
+        DEFAULT_TIMEOUT,
+        "--timeout",
+        help=(
+            "Per-search budget in seconds. Providers run in parallel; ones that"
+            " exceed the budget are dropped from the response."
+        ),
+    ),
     json_output: bool = typer.Option(False, "--json", help="Emit JSON instead of a Rich table."),
 ) -> None:
     """Search papers across providers and print merged, deduplicated results."""
-    aggregator = _build_aggregator(source)
+    aggregator = _build_aggregator(source, timeout=timeout)
     try:
         papers = aggregator.search(
             SearchQuery(

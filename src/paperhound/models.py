@@ -18,13 +18,26 @@ class PaperIdentifier(BaseModel):
     arxiv_id: str | None = None
     doi: str | None = None
     semantic_scholar_id: str | None = None
+    openalex_id: str | None = None
+    dblp_key: str | None = None
+    core_id: str | None = None
+    pwc_id: str | None = None
 
     def primary(self) -> str:
         """Return the most stable identifier available."""
-        return self.arxiv_id or self.doi or self.semantic_scholar_id or ""
+        return (
+            self.arxiv_id
+            or self.doi
+            or self.semantic_scholar_id
+            or self.openalex_id
+            or self.dblp_key
+            or self.core_id
+            or self.pwc_id
+            or ""
+        )
 
     def is_empty(self) -> bool:
-        return not (self.arxiv_id or self.doi or self.semantic_scholar_id)
+        return not self.primary()
 
 
 class Paper(BaseModel):
@@ -64,6 +77,10 @@ class Paper(BaseModel):
             doi=self.identifiers.doi or other.identifiers.doi,
             semantic_scholar_id=self.identifiers.semantic_scholar_id
             or other.identifiers.semantic_scholar_id,
+            openalex_id=self.identifiers.openalex_id or other.identifiers.openalex_id,
+            dblp_key=self.identifiers.dblp_key or other.identifiers.dblp_key,
+            core_id=self.identifiers.core_id or other.identifiers.core_id,
+            pwc_id=self.identifiers.pwc_id or other.identifiers.pwc_id,
         )
         if not merged.authors:
             merged.authors = other.authors
