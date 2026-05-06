@@ -1,8 +1,6 @@
 # CLAUDE.md — paperhound development process
 
 Authoritative checklist for AI coding assistants working in this repo.
-Supplements `AGENTS.md` (project layout + conventions). When the two
-overlap, this file wins.
 
 ## Golden rule
 
@@ -14,8 +12,8 @@ that would fail before the change and pass after. Live API calls live in
 
 For any feature, bugfix, or refactor — follow these steps in order:
 
-1. **Read context.** Skim `AGENTS.md`, the touched module, and existing
-   tests. Reuse types from `paperhound.models` and errors from
+1. **Read context.** Skim the touched module and its existing tests.
+   Reuse types from `paperhound.models` and errors from
    `paperhound.errors`.
 2. **Plan.** Write the tasks down with `TaskCreate`. Mark each task
    `in_progress` before you start it and `completed` the moment it lands.
