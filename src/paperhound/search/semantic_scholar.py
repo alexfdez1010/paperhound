@@ -56,9 +56,7 @@ def _s2_to_paper(payload: dict[str, Any]) -> Paper:
     )
 
 
-def _retry_after(
-    resp: httpx.Response, attempt: int, base_delay: float, max_delay: float
-) -> float:
+def _retry_after(resp: httpx.Response, attempt: int, base_delay: float, max_delay: float) -> float:
     header = resp.headers.get("Retry-After")
     if header:
         try:
@@ -133,9 +131,7 @@ class SemanticScholarProvider(SearchProvider):
                 )
                 raise ProviderError(f"Semantic Scholar {op} failed: 403 Forbidden.{hint}")
             if resp.status_code in _RETRY_STATUSES and attempt < self._max_retries:
-                delay = _retry_after(
-                    resp, attempt, self._retry_base_delay, self._retry_max_delay
-                )
+                delay = _retry_after(resp, attempt, self._retry_base_delay, self._retry_max_delay)
                 logger.warning(
                     "Semantic Scholar %s -> %s (attempt %d/%d). Retrying in %.1fs.",
                     op,
