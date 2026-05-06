@@ -41,7 +41,14 @@ def test_render_paper_detail_has_abstract_and_ids() -> None:
     assert "Attention Is All You Need" in out
     assert "Ashish Vaswani" in out
     assert "1706.03762" in out
+    assert "Abstract" in out
     assert "Transformers." in out
+
+
+def test_render_paper_detail_skips_abstract_header_when_empty() -> None:
+    paper = make_paper().model_copy(update={"abstract": None})
+    out = _capture(lambda c: render_paper_detail(paper, c))
+    assert "Abstract" not in out
 
 
 def test_papers_to_json_roundtrip() -> None:

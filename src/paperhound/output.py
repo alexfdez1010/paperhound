@@ -60,6 +60,7 @@ def render_paper_detail(paper: Paper, console: Console) -> None:
         console.print(f"[dim]PDF:[/dim] {paper.pdf_url}")
     if paper.abstract:
         console.print()
+        console.print("[bold]Abstract[/bold]")
         console.print(paper.abstract)
 
 

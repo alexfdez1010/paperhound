@@ -115,6 +115,7 @@ def test_show_prints_abstract(
     )
     result = runner.invoke(cli_module.app, ["show", "2401.12345"])
     assert result.exit_code == 0
+    assert "Abstract" in result.stdout
     assert "An abstract." in result.stdout
 
 

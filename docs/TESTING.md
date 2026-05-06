@@ -54,10 +54,11 @@ EXPECTED=$(curl -fsS https://pypi.org/pypi/paperhound/json | python3 -c 'import 
 echo "installed=$INSTALLED expected=$EXPECTED"
 test "$INSTALLED" = "$EXPECTED" || { echo "FAIL: stale binary"; exit 1; }
 
-# 0.2 — latest agent skill from GitHub
+# 0.2 — latest agent skill from GitHub (skills.sh installs to <cwd>/.agents/skills/)
 npx -y skills add alexfdez1010/paperhound -y
-test -f ~/.claude/skills/paperhound/SKILL.md || { echo "FAIL: skill not installed"; exit 1; }
-grep -q "^name: paperhound" ~/.claude/skills/paperhound/SKILL.md \
+SKILL_MD=./.agents/skills/paperhound/SKILL.md
+test -f "$SKILL_MD" || { echo "FAIL: skill not installed"; exit 1; }
+grep -q "^name: paperhound" "$SKILL_MD" \
   || { echo "FAIL: skill frontmatter"; exit 1; }
 
 # 0.3 — sanity: which binary, which Python
@@ -67,8 +68,8 @@ paperhound --help > /dev/null
 
 Pre-flight pass criteria:
 - `paperhound version` prints the same version as PyPI's `info.version`.
-- `~/.claude/skills/paperhound/SKILL.md` exists with a `name: paperhound`
-  frontmatter line.
+- `./.agents/skills/paperhound/SKILL.md` exists with a `name: paperhound`
+  frontmatter line (skills.sh installs project-scoped, into the current dir).
 - `paperhound --help` exits 0 and lists the six commands (`version`, `search`,
   `show`, `download`, `convert`, `get`).
 
@@ -91,7 +92,7 @@ running tally — every step must pass before declaring the release green.
 | 10 | `paperhound get 2005.11401 -o rag.md` | exit 0; `rag.md` first heading is `## Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks`; ≥ 300 lines | 70 s cold / 10 s warm |
 | 11 | `paperhound show invalid-id-zzz` | exit code 1; stderr contains `Not found` | <1 s |
 | 12 | `paperhound search "rare-string-zzzzzzzzzzz12345" -n 3 -s arxiv` | exit 0; stderr contains `No results` | ~1 s |
-| 13 | Skill smoke: `cat ~/.claude/skills/paperhound/SKILL.md \| grep -E "paperhound (search\|show\|download\|convert\|get)"` | ≥ 5 matches (every command documented) | <0.1 s |
+| 13 | Skill smoke: `grep -cE "paperhound (search\|show\|download\|convert\|get)" ./.agents/skills/paperhound/SKILL.md` | ≥ 5 matches (every command documented) | <0.1 s |
 
 ### 2. Copy-paste runner
 
@@ -158,7 +159,7 @@ paperhound search "rare-string-zzzzzzzzzzz12345" -n 3 -s arxiv 2>err.log
 grep -qi "no results" err.log
 
 step 13
-matches=$(grep -cE "paperhound (search|show|download|convert|get)" ~/.claude/skills/paperhound/SKILL.md)
+matches=$(grep -cE "paperhound (search|show|download|convert|get)" ./.agents/skills/paperhound/SKILL.md)
 test "$matches" -ge 5
 
 echo "── ALL SMOKE STEPS PASSED ──"
