@@ -53,6 +53,8 @@ Trigger this skill when the user asks for any of:
 - "Add paper X to my library"
 - "Search my library for Y"
 - "List papers I've saved"
+- "What papers does this paper cite?" / "Show me the references for X"
+- "What papers cite this paper?" / "Who cited X?"
 
 ## Commands
 
@@ -142,6 +144,27 @@ paperhound get <identifier> [-o output.md] [--keep-pdf]
 
 - Default Markdown filename is `<id>.md` in the current directory.
 - The intermediate PDF is deleted unless `--keep-pdf` is passed.
+
+### Citation graph — refs and cited-by
+
+```bash
+# Works the paper cites (its reference list)
+paperhound refs <identifier> [--depth 1|2] [--limit N] [--source openalex|semantic_scholar] [--json]
+
+# Works that cite the paper
+paperhound cited-by <identifier> [--depth 1|2] [--limit N] [--source openalex|semantic_scholar] [--json]
+```
+
+- Default provider order: OpenAlex → Semantic Scholar (automatic fallback).
+- `--depth 2` fetches references/citations of references/citations (BFS, capped
+  at `limit * 2` total, 0.1 s polite pause between hops, deduped by id/DOI/title).
+- Output is the same `Paper` format as `search` — use `--json` for scripting.
+
+Typical agent workflow for related-work exploration:
+
+1. `paperhound refs 1706.03762 --json -n 10` — get the top references.
+2. Pick an interesting reference, run `paperhound show <id>` to confirm relevance.
+3. `paperhound cited-by 1706.03762 --json -n 10` — find who built on this work.
 
 ## Recommended workflow for agents
 

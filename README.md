@@ -87,6 +87,8 @@ paperhound show 1706.03762 --json
 | `paperhound download <id> -o <path>` | Download a paper PDF. |
 | `paperhound convert <pdf> -o <md>` | Convert a PDF (or any docling-supported file/URL) to Markdown. |
 | `paperhound get <id> -o <md>` | Download + convert in one step. `--keep-pdf` to keep the PDF. |
+| `paperhound refs <id>` | List works the paper cites (its references). `--depth 1\|2`, `--limit N`, `--source openalex\|semantic_scholar`, `--json`. |
+| `paperhound cited-by <id>` | List works that cite the paper. Same flags as `refs`. |
 | `paperhound add <id>` | Fetch metadata and add to local library. `--convert` also stores Markdown. |
 | `paperhound list` | List all papers in the local library. |
 | `paperhound grep <query>` | Full-text search the local library (title + abstract + Markdown body). |
@@ -122,6 +124,35 @@ paperhound rm 1706.03762
 Re-adding a paper is idempotent — it updates the metadata in place.
 The schema is versioned; on a version mismatch paperhound reports a clear error
 rather than silently operating on a stale schema.
+
+## Citation graph
+
+Traverse the citation graph around any paper using its arXiv id, DOI, or
+Semantic Scholar id.
+
+```bash
+# Papers that "Attention Is All You Need" cites
+paperhound refs 1706.03762
+
+# Papers that cite it
+paperhound cited-by 1706.03762
+
+# Go two hops deep (refs of refs / cites of cites), limit to 50 unique papers
+paperhound refs 1706.03762 --depth 2 --limit 50
+
+# Force a specific provider
+paperhound cited-by 1706.03762 --source semantic_scholar
+
+# JSON output for scripting
+paperhound refs 1706.03762 --json | jq '.[].title'
+```
+
+Both commands return the same `Paper` format as `search`. The default provider
+order is **OpenAlex first, Semantic Scholar as fallback** (automatically
+triggered when OpenAlex returns nothing or errors). Results are deduplicated
+by arXiv id / DOI / title before being returned. At `--depth 2`, total fetched
+is capped at `limit * 2` and a small pause (0.1 s) is inserted between hops to
+stay in the polite API pool.
 
 ## MCP server
 

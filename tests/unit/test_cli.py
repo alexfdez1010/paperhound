@@ -497,3 +497,202 @@ class TestLibraryRm:
         result = runner.invoke(cli_module.app, ["rm", "--yes", "2401.12345"])
         assert result.exit_code == 0
         assert not md_file.exists(), "Markdown file should be deleted on rm"
+
+
+# ---------------------------------------------------------------------------
+# Citation graph commands: refs and cited-by
+# ---------------------------------------------------------------------------
+
+
+class TestCitationCommands:
+    """CLI tests for 'refs' and 'cited-by' commands."""
+
+    def _patch_fetch(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        papers: list[Paper],
+        error: Exception | None = None,
+    ) -> None:
+        """Monkeypatch both fetch_references and fetch_citations in cli module."""
+        import paperhound.citations as cit_module
+
+        def fake_fetch(*args, **kwargs) -> list[Paper]:
+            if error is not None:
+                raise error
+            return papers
+
+        monkeypatch.setattr(cit_module, "fetch_references", fake_fetch)
+        monkeypatch.setattr(cit_module, "fetch_citations", fake_fetch)
+
+    def test_refs_table_output(
+        self,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_paper: Paper,
+    ) -> None:
+        """refs command prints a Rich table with paper titles."""
+        import paperhound.citations as cit_module
+
+        monkeypatch.setattr(cit_module, "fetch_references", lambda *a, **k: [fake_paper])
+        result = runner.invoke(cli_module.app, ["refs", "1706.03762"])
+        assert result.exit_code == 0, result.output
+        assert "A Cool Paper" in result.output
+
+    def test_refs_json_output(
+        self,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_paper: Paper,
+    ) -> None:
+        """refs --json emits valid JSON list."""
+        import paperhound.citations as cit_module
+
+        monkeypatch.setattr(cit_module, "fetch_references", lambda *a, **k: [fake_paper])
+        result = runner.invoke(cli_module.app, ["refs", "1706.03762", "--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data[0]["title"] == "A Cool Paper"
+
+    def test_cited_by_table_output(
+        self,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_paper: Paper,
+    ) -> None:
+        """cited-by command prints a Rich table."""
+        import paperhound.citations as cit_module
+
+        monkeypatch.setattr(cit_module, "fetch_citations", lambda *a, **k: [fake_paper])
+        result = runner.invoke(cli_module.app, ["cited-by", "1706.03762"])
+        assert result.exit_code == 0, result.output
+        assert "A Cool Paper" in result.output
+
+    def test_cited_by_json_output(
+        self,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_paper: Paper,
+    ) -> None:
+        """cited-by --json emits valid JSON list."""
+        import paperhound.citations as cit_module
+
+        monkeypatch.setattr(cit_module, "fetch_citations", lambda *a, **k: [fake_paper])
+        result = runner.invoke(cli_module.app, ["cited-by", "1706.03762", "--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert isinstance(data, list)
+
+    def test_refs_no_results(
+        self,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Empty result set prints a 'No results' message."""
+        import paperhound.citations as cit_module
+
+        monkeypatch.setattr(cit_module, "fetch_references", lambda *a, **k: [])
+        result = runner.invoke(cli_module.app, ["refs", "1706.03762"])
+        assert result.exit_code == 0
+        assert "No results" in result.stderr
+
+    def test_cited_by_no_results(
+        self,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import paperhound.citations as cit_module
+
+        monkeypatch.setattr(cit_module, "fetch_citations", lambda *a, **k: [])
+        result = runner.invoke(cli_module.app, ["cited-by", "1706.03762"])
+        assert result.exit_code == 0
+        assert "No results" in result.stderr
+
+    def test_refs_invalid_source(
+        self,
+        runner: CliRunner,
+    ) -> None:
+        """Unknown --source should exit with error."""
+        result = runner.invoke(cli_module.app, ["refs", "1706.03762", "--source", "bogus"])
+        assert result.exit_code != 0
+
+    def test_refs_source_semantic_scholar(
+        self,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_paper: Paper,
+    ) -> None:
+        """--source semantic_scholar (alias s2) is accepted."""
+        import paperhound.citations as cit_module
+
+        calls: list[dict] = []
+
+        def capture(*args, **kwargs) -> list[Paper]:
+            calls.append(kwargs)
+            return [fake_paper]
+
+        monkeypatch.setattr(cit_module, "fetch_references", capture)
+        result = runner.invoke(
+            cli_module.app, ["refs", "1706.03762", "--source", "semantic_scholar"]
+        )
+        assert result.exit_code == 0, result.output
+        assert calls[0].get("source") == "semantic_scholar"
+
+    def test_refs_source_openalex(
+        self,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_paper: Paper,
+    ) -> None:
+        """--source openalex is accepted."""
+        import paperhound.citations as cit_module
+
+        calls: list[dict] = []
+
+        def capture(*args, **kwargs) -> list[Paper]:
+            calls.append(kwargs)
+            return [fake_paper]
+
+        monkeypatch.setattr(cit_module, "fetch_references", capture)
+        result = runner.invoke(cli_module.app, ["refs", "1706.03762", "--source", "openalex"])
+        assert result.exit_code == 0, result.output
+        assert calls[0].get("source") == "openalex"
+
+    def test_refs_depth_and_limit_passed_through(
+        self,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_paper: Paper,
+    ) -> None:
+        """depth and limit options are forwarded to fetch_references."""
+        import paperhound.citations as cit_module
+
+        calls: list[dict] = []
+
+        def capture(*args, **kwargs) -> list[Paper]:
+            calls.append({"depth": kwargs.get("depth"), "limit": kwargs.get("limit")})
+            return [fake_paper]
+
+        monkeypatch.setattr(cit_module, "fetch_references", capture)
+        result = runner.invoke(
+            cli_module.app, ["refs", "1706.03762", "--depth", "2", "--limit", "7"]
+        )
+        assert result.exit_code == 0, result.output
+        assert calls[0]["depth"] == 2
+        assert calls[0]["limit"] == 7
+
+    def test_refs_provider_error_exits_nonzero(
+        self,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """ProviderError from fetch_references must cause non-zero exit."""
+        import paperhound.citations as cit_module
+        from paperhound.errors import ProviderError
+
+        monkeypatch.setattr(
+            cit_module,
+            "fetch_references",
+            lambda *a, **k: (_ for _ in ()).throw(ProviderError("boom")),
+        )
+        result = runner.invoke(cli_module.app, ["refs", "1706.03762"])
+        assert result.exit_code != 0
