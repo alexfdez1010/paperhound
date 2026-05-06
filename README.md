@@ -1,39 +1,43 @@
 # paperhound
 
-> **paperhound** — sniff out academic papers from the command line.
+> **paperhound** — sniff out academic papers from Python or the command line.
 
-A small, fast CLI for AI/ML researchers who want a single tool to **search**,
-**inspect**, **download**, and **convert to Markdown** papers from many academic
-sources at once. Conversion is powered by
-[docling](https://github.com/docling-project/docling), so the resulting Markdown
-is good enough to feed straight into an LLM context.
+A small, fast Python library (and matching CLI) for AI/ML researchers and
+tooling authors who want a single dependency to **search**, **inspect**,
+**download**, and **convert to Markdown** papers from many academic sources at
+once. Conversion is powered by
+[docling](https://github.com/docling-project/docling), so the resulting
+Markdown is good enough to feed straight into an LLM context window.
+
+paperhound is built primarily as a library — every CLI command is a thin
+wrapper around a public Python API you can import directly. The CLI is the
+fastest way to drive it from the terminal or from agents, but anything you
+can do at the prompt you can also do with three lines of Python.
 
 ## Features
 
 - 🔎 **Unified search** — one query, many backends. arXiv, OpenAlex, DBLP,
-  Crossref and Hugging Face Papers (and optionally Semantic Scholar / CORE) are
-  queried in parallel with a 10-second budget. Results are merged round-robin
-  (one from each provider, then the next, …) so a fast provider can't
-  monopolize the top-N — and deduplicated by arXiv id / DOI / title. Slow
-  providers are dropped silently — the CLI returns whatever came back in time.
-- 📄 **Inspect before downloading** — `paperhound show <id>` prints the
-  abstract and metadata so you can decide if it's worth a download.
-- ⬇️ **Download by identifier** — arXiv id, DOI, Semantic Scholar paper id, or
-  any paper URL. Open-access PDFs are resolved automatically.
-- 📝 **PDF → Markdown via docling** — `paperhound convert paper.pdf` or
-  `paperhound get <id>` for the full pipeline.
-- 📚 **Local library** — `paperhound add <id>` stores metadata in a
-  SQLite FTS5 database at `~/.paperhound/library/`. `paperhound list` shows
-  all saved papers; `paperhound grep <query>` does offline full-text search
-  over titles, abstracts, and stored Markdown bodies; `paperhound rm <id>`
-  removes an entry.
-- 🔌 **MCP server** — `paperhound mcp` exposes all tools over stdio so
-  Claude Code and other MCP-compatible agents can call paperhound directly
-  without a skill shim. Install the optional extra: `pip install 'paperhound[mcp]'`.
-- 🤖 **Agent-ready** — ships with a `SKILL.md` and JSON output mode so any
-  Claude / OpenAI / local agent can drive the CLI.
+  Crossref and Hugging Face Papers (and optionally Semantic Scholar / CORE)
+  are queried in parallel with a 10-second budget. Results are merged
+  round-robin (one from each provider, then the next, …) so a fast provider
+  can't monopolize the top-N — and deduplicated by arXiv id / DOI / title.
+  Slow providers are dropped silently — you get whatever came back in time.
+- 📄 **Inspect before downloading** — fetch the abstract and metadata, decide
+  if the paper is worth the bytes.
+- ⬇️ **Download by identifier** — arXiv id, DOI, Semantic Scholar paper id,
+  or any paper URL. Open-access PDFs are resolved automatically.
+- 📝 **PDF → Markdown via docling** — figures, LaTeX equations and HTML
+  tables are all opt-in flags.
+- 📚 **Local library** — a SQLite FTS5 database at `~/.paperhound/library/`.
+  Add a paper, store its Markdown, then offline-grep over titles, abstracts
+  and bodies.
+- 🧠 **Optional embedding rerank** — install `paperhound[rerank]` and the
+  CLI reranks results by query/abstract similarity automatically.
+- 🤖 **Agent-ready CLI** — every command speaks JSON via `--json`, and the
+  repo ships a [skills.sh](https://skills.sh) skill so any Claude / OpenAI /
+  local agent can drive paperhound with no extra glue.
 - 🧪 **Heavily tested** — every module has unit tests; live integration tests
-  are gated behind an environment variable.
+  sit under `tests/integration/`.
 
 ## Installation
 
@@ -44,13 +48,103 @@ pip install paperhound
 or with [uv](https://docs.astral.sh/uv/):
 
 ```bash
+# As a library inside another project
+uv add paperhound
+
+# Or as an isolated CLI on your $PATH
 uv tool install paperhound
 ```
 
 Python 3.10+ is required. Docling pulls in PyTorch on first run, so the very
 first conversion may take a moment to download model weights.
 
-## Quick start
+### Optional: embedding rerank
+
+```bash
+pip install 'paperhound[rerank]'
+```
+
+Adds `sentence-transformers` so paperhound can rerank merged search results by
+embedding similarity between the query and each candidate's `title + abstract`.
+When the extra is installed, rerank runs automatically on every CLI search
+(`--no-rerank` to skip). Library callers opt in by calling
+`paperhound.rerank.rerank(...)` themselves.
+
+## Quick start (Python)
+
+```python
+from paperhound import search_papers, get_paper, convert_to_markdown
+
+# 1. Search across all default providers (arxiv + openalex + dblp + crossref + hf).
+papers = search_papers("retrieval augmented generation", limit=5)
+for p in papers:
+    print(p.year, p.title, p.identifiers.arxiv_id or p.identifiers.doi)
+
+# 2. Pull the abstract for a single paper.
+paper = get_paper("1706.03762")
+print(paper.title)
+print(paper.abstract)
+
+# 3. PDF → Markdown (path or URL).
+md = convert_to_markdown("https://arxiv.org/pdf/1706.03762", output="attention.md")
+```
+
+Every function returns a typed `paperhound.models.Paper` object — `pydantic`
+under the hood, so you get autocomplete, `model_dump(mode="json")`, validation,
+and stable field names across providers.
+
+### Building a corpus
+
+```python
+from paperhound import Library, search_papers, get_paper
+
+lib = Library()                   # ~/.paperhound/library/ by default
+for hit in search_papers("vision language models", limit=20):
+    lib.add(hit)                  # idempotent — re-adds update in place
+
+# Offline full-text search later, no API calls.
+hits = lib.grep("multi-head attention", limit=10)
+for h in hits:
+    print(h.id, h.title)
+```
+
+### Citation graph
+
+```python
+from paperhound.citations import fetch_references, fetch_citations
+
+refs   = fetch_references("1706.03762", depth=1, limit=10)
+citing = fetch_citations("1706.03762", depth=2, limit=50)
+```
+
+## Library API reference
+
+Top-level package re-exports the symbols you need most often:
+
+| Symbol | Purpose |
+|---|---|
+| `paperhound.search_papers(query, limit=10, sources=None, **filters)` | Run a unified search; returns `list[Paper]`. |
+| `paperhound.get_paper(identifier)` | Resolve an id/DOI/URL to a single `Paper`, or `None`. |
+| `paperhound.convert_to_markdown(src, output=None, options=None)` | PDF/URL → Markdown via docling. |
+| `paperhound.pdf_to_markdown(...)` | Lower-level PDF-only entry point. |
+| `paperhound.Paper`, `Author`, `PaperIdentifier` | Pydantic models. |
+| `paperhound.Library` | SQLite FTS5 library wrapper. |
+
+Need finer control? Drop into the underlying modules:
+
+- `paperhound.search` — provider registry, `SearchAggregator`, `SearchQuery`,
+  `SearchProvider` base class. Plug in your own provider with one
+  `register("name", Factory)` call.
+- `paperhound.download` — `resolve_pdf_url`, `download_pdf`.
+- `paperhound.convert` — `ConversionOptions`, `convert_to_markdown`.
+- `paperhound.citations` — `fetch_references`, `fetch_citations`.
+- `paperhound.rerank` — optional, requires the `rerank` extra.
+- `paperhound.errors` — `PaperhoundError`, `ProviderError`, `LibraryError`,
+  `RerankError`. Every other exception bubbles untouched.
+
+## CLI
+
+Once installed, `paperhound` is on your `$PATH`.
 
 ```bash
 # Search across all providers
@@ -90,11 +184,11 @@ dblp_key,core_id}`, `sources[]`.
 
 `--json` and `--format` are mutually exclusive on `show` — use one or the other.
 
-## Commands
+### Commands
 
 | Command | Description |
 |---|---|
-| `paperhound search <query>` | Run a unified search. `--limit`, `--source arxiv\|openalex\|dblp\|crossref\|huggingface\|semantic_scholar\|core` (repeatable), `--year RANGE`, `--min-citations N`, `--venue STRING`, `--author STRING`, `--timeout`, `--json` (JSONL output), `--rerank` (embedding rerank; see below), `--rerank-model`. |
+| `paperhound search <query>` | Run a unified search. `--limit`, `--source arxiv\|openalex\|dblp\|crossref\|huggingface\|semantic_scholar\|core` (repeatable), `--year RANGE`, `--min-citations N`, `--venue STRING`, `--author STRING`, `--timeout`, `--json` (JSONL output), `--rerank/--no-rerank` (default on when `paperhound[rerank]` is installed), `--rerank-model`. |
 | `paperhound show <id>` | Fetch a paper's metadata + abstract. `--format markdown\|bibtex\|ris\|csljson` (default `markdown`), `--json` (compact JSON; mutually exclusive with `--format`). |
 | `paperhound download <id> -o <path>` | Download a paper PDF. |
 | `paperhound convert <pdf> -o <md>` | Convert a PDF (or any docling-supported file/URL) to Markdown. `--with-figures` saves embedded images to `<stem>_assets/` and references them in the output. `--equations latex` preserves math as `$...$`/`$$...$$`. `--tables html` embeds `<table>` blocks instead of GFM pipe tables. |
@@ -105,12 +199,11 @@ dblp_key,core_id}`, `sources[]`.
 | `paperhound list` | List all papers in the local library. |
 | `paperhound grep <query>` | Full-text search the local library (title + abstract + Markdown body). |
 | `paperhound rm <id>` | Remove a paper from the local library (and its Markdown file, if any). |
-| `paperhound mcp` | Start an MCP server over stdio exposing all tools. Requires `pip install 'paperhound[mcp]'`. |
 | `paperhound version` | Print the installed version. |
 
 Run `paperhound <command> --help` for full options.
 
-## Conversion options
+### Conversion options
 
 `paperhound convert` (and the `get` / `add --convert` pipeline) accepts three
 flags that control how the PDF is rendered to Markdown:
@@ -122,20 +215,15 @@ flags that control how the PDF is rendered to Markdown:
 | `--tables` | `markdown`, `html` | `markdown` | `html` embeds raw `<table>` blocks for better fidelity with merged/irregular cells. |
 
 ```bash
-# Extract figures, use LaTeX math, embed HTML tables
 paperhound convert paper.pdf -o paper.md --with-figures --equations latex --tables html
-
-# Just preserve LaTeX math
 paperhound convert paper.pdf -o paper.md --equations latex
-
-# HTML tables only, no figure extraction
 paperhound convert paper.pdf -o paper.md --tables html
 ```
 
 All three flags default to the original behaviour, so existing pipelines are
 unaffected.
 
-## Filters
+### Filters
 
 `paperhound search` accepts four filter flags. Filters are pushed down to
 providers that support them (OpenAlex, Crossref, Semantic Scholar) and always
@@ -148,22 +236,10 @@ applied client-side after the merge as a safety net.
 | `--venue STRING` | case-insensitive substring | `--venue NeurIPS` |
 | `--author STRING` | case-insensitive substring | `--author Hinton` |
 
-`--year` is the preferred way to filter by year. It accepts a single year
-(`2023`), an inclusive range (`2023-2026`), open-ended from (`2023-`), or
-open-ended up-to (`-2026`). The older `--year-min` / `--year-max` flags are
-still accepted.
-
 ```bash
-# Papers from 2022 to 2024 with at least 100 citations
 paperhound search "vision transformers" --year 2022-2024 --min-citations 100
-
-# NeurIPS papers by Hinton
 paperhound search "deep learning" --venue NeurIPS --author Hinton
-
-# arXiv-only papers from 2023 onwards
 paperhound search "diffusion models" -s arxiv --year 2023-
-
-# Combine filters and JSON output
 paperhound search "llm alignment" --year 2023 --min-citations 50 --json | jq .title
 ```
 
@@ -172,72 +248,44 @@ unknown (`null`) are kept — the filter cannot be verified. Papers whose
 `citation_count` is unknown are excluded when `--min-citations` is set
 (conservative: the user asked for a floor).
 
-## Export formats
+### Export formats
 
 `paperhound show` can export a paper's metadata in four formats:
 
 ```bash
-# Rich terminal view (default)
-paperhound show 1706.03762
-
-# BibTeX — paste into your .bib file
+paperhound show 1706.03762                       # rich terminal view
 paperhound show 1706.03762 --format bibtex
-
-# RIS — compatible with Zotero, Mendeley, EndNote
 paperhound show 1706.03762 --format ris
-
-# CSL-JSON — machine-readable, compatible with Pandoc and citation processors
 paperhound show 1706.03762 --format csljson
 ```
 
 BibTeX cite keys are derived deterministically as `<firstAuthorLastName><year><firstSignificantTitleWord>` (accents stripped, lowercased). LaTeX special characters (`&`, `%`, `$`, `_`, etc.) are escaped automatically.
 
-## Local library
+### Local library
 
 paperhound keeps a persistent per-user library at `~/.paperhound/library/`
-(override with `PAPERHOUND_LIBRARY_DIR`).  The library is backed by a SQLite
+(override with `PAPERHOUND_LIBRARY_DIR`). The library is backed by a SQLite
 FTS5 database — no extra dependencies required.
 
 ```bash
-# Add a paper (metadata only)
 paperhound add 1706.03762
-
-# Add and also save the Markdown version of the PDF
 paperhound add 1706.03762 --convert
-
-# List all saved papers
 paperhound list
-
-# Full-text search offline
 paperhound grep "attention mechanism"
-
-# Remove a paper (and its Markdown file, if any)
 paperhound rm 1706.03762
 ```
 
-Re-adding a paper is idempotent — it updates the metadata in place.
-The schema is versioned; on a version mismatch paperhound reports a clear error
+Re-adding a paper is idempotent — it updates the metadata in place. The
+schema is versioned; on a version mismatch paperhound reports a clear error
 rather than silently operating on a stale schema.
 
-## Citation graph
-
-Traverse the citation graph around any paper using its arXiv id, DOI, or
-Semantic Scholar id.
+### Citation graph
 
 ```bash
-# Papers that "Attention Is All You Need" cites
 paperhound refs 1706.03762
-
-# Papers that cite it
 paperhound cited-by 1706.03762
-
-# Go two hops deep (refs of refs / cites of cites), limit to 50 unique papers
 paperhound refs 1706.03762 --depth 2 --limit 50
-
-# Force a specific provider
 paperhound cited-by 1706.03762 --source semantic_scholar
-
-# JSON output for scripting
 paperhound refs 1706.03762 --json | jq '.[].title'
 ```
 
@@ -248,95 +296,33 @@ by arXiv id / DOI / title before being returned. At `--depth 2`, total fetched
 is capped at `limit * 2` and a small pause (0.1 s) is inserted between hops to
 stay in the polite API pool.
 
-## Rerank
+### Rerank
 
-Add `--rerank` to any `paperhound search` call to re-sort results by embedding
-similarity between the query and each candidate's title + abstract. This can
-surface more relevant papers when the round-robin merge returns noisier results
-from some providers.
-
-```bash
-# Rerank using the default model (all-MiniLM-L6-v2, ~22 MB)
-paperhound search "vision language models" --rerank
-
-# Use a different SentenceTransformer model
-paperhound search "graph neural networks" --rerank \
-  --rerank-model sentence-transformers/all-mpnet-base-v2
-```
-
-### Installation
+When `paperhound[rerank]` is installed, every CLI `search` call reranks
+results by embedding similarity between the query and each candidate's
+`title + abstract`. Pass `--no-rerank` to skip it for one call.
 
 ```bash
 pip install 'paperhound[rerank]'
+
+paperhound search "vision language models"          # rerank on by default
+paperhound search "graph neural networks" --no-rerank
+paperhound search "agents" --rerank-model sentence-transformers/all-mpnet-base-v2
 ```
 
-`--rerank` exits with a clear error if `sentence-transformers` is not installed.
+Without the extra installed the CLI silently falls back to the merge-order
+ranking — no error, no hang. Library users that want to invoke rerank
+directly call `paperhound.rerank.rerank(query, papers, model_name=None)`.
 
-### How it works
+How it works:
 
 1. The aggregator fetches up to `limit * 3` candidates (capped at 50).
 2. Each candidate's text (`title + abstract`) is embedded alongside the query
    using the chosen SentenceTransformer model (cached per process).
 3. Candidates are sorted by cosine similarity (descending).
-4. Papers with neither a title nor an abstract keep their merge-order rank and
-   are placed at the end.
+4. Papers with neither a title nor an abstract keep their merge-order rank
+   and are placed at the end.
 5. The top `--limit` results are returned.
-
-## MCP server
-
-`paperhound mcp` starts an MCP (Model Context Protocol) server over stdio,
-exposing paperhound as callable tools to Claude Code and any other
-MCP-compatible agent.
-
-### Installation
-
-```bash
-pip install 'paperhound[mcp]'
-```
-
-### Tools exposed
-
-| Tool | Description |
-|---|---|
-| `search(query, limit, sources)` | Search papers across providers; returns list of paper records. |
-| `show(identifier)` | Fetch metadata + abstract for a single paper. |
-| `download(identifier, dest)` | Download a paper PDF; returns the path. |
-| `convert(identifier, dest)` | Convert a PDF/URL to Markdown; returns path or inline Markdown. |
-| `library_add(identifier, convert)` | Add a paper to the local library (optionally with Markdown). |
-| `library_list()` | List all papers in the local library. |
-| `library_grep(query, limit)` | Full-text search the local library; returns records with snippets. |
-
-### Wiring into Claude Code
-
-Add the following to your Claude Code `settings.json`
-(`~/.claude/settings.json` or the project-level `.claude/settings.json`):
-
-```json
-{
-  "mcpServers": {
-    "paperhound": {
-      "command": "paperhound",
-      "args": ["mcp"]
-    }
-  }
-}
-```
-
-Or, if `paperhound` is installed in a virtual environment:
-
-```json
-{
-  "mcpServers": {
-    "paperhound": {
-      "command": "/path/to/venv/bin/paperhound",
-      "args": ["mcp"]
-    }
-  }
-}
-```
-
-After saving, restart Claude Code. The `paperhound` tools will appear in the
-available tool list and Claude can call them directly — no skill shim needed.
 
 ## Identifier formats
 
@@ -356,6 +342,7 @@ paperhound accepts whatever you have on hand:
 | `CROSSREF_MAILTO` | Optional. Same idea for Crossref's polite pool. |
 | `CORE_API_KEY` | Required to enable the CORE provider. Without a key the provider reports unavailable and the aggregator skips it silently. Get a free key at <https://core.ac.uk/services/api>. |
 | `SEMANTIC_SCHOLAR_API_KEY` | Optional. Semantic Scholar's anonymous quota is shared globally and 429s are common; the provider retries with exponential backoff. Set this to your own key for steadier throughput. |
+| `PAPERHOUND_LIBRARY_DIR` | Override the library directory (default `~/.paperhound/library/`). |
 
 ### Adding a new provider
 
@@ -370,21 +357,19 @@ paperhound accepts whatever you have on hand:
 
 ## Use it from agents
 
-paperhound is designed to be driven by AI agents. The repo ships a ready-to-install
-[skill at `skills/paperhound/SKILL.md`](skills/paperhound/SKILL.md) that documents
-every command, recommends the JSON output flag, and gives an end-to-end example.
-
-Install it into Claude Code (or any [skills.sh](https://skills.sh)-compatible
-agent) with one command:
+paperhound ships a ready-to-install
+[skill at `skills/paperhound/SKILL.md`](skills/paperhound/SKILL.md) that
+documents every command, recommends the JSON output flag, and gives an
+end-to-end example. Install it with one command:
 
 ```bash
 npx skills add alexfdez1010/paperhound
 ```
 
-This uses the [`skills` CLI](https://github.com/vercel-labs/skills) to discover
-the `SKILL.md` under `skills/paperhound/` and place it in your agent's skill
-directory (`~/.claude/skills/paperhound/` for Claude Code). Pass
-`-a <agent>` to target a specific agent (e.g. `-a claude-code`,
+This uses the [`skills` CLI](https://github.com/vercel-labs/skills) to
+discover the `SKILL.md` under `skills/paperhound/` and place it in your
+agent's skill directory (`~/.claude/skills/paperhound/` for Claude Code).
+Pass `-a <agent>` to target a specific agent (e.g. `-a claude-code`,
 `-a opencode`).
 
 ## Development
@@ -406,11 +391,11 @@ runs.
 
 ## Releasing to PyPI
 
-1. Bump `version` in `pyproject.toml` and `paperhound/__init__.py`.
-2. Tag the release: `git tag v0.1.1 && git push --tags`.
-3. The `Publish to PyPI` GitHub Action builds and publishes via
-   [PyPI Trusted Publishing](https://docs.pypi.org/trusted-publishers/) — no
-   API token required, just configure the trusted publisher once on PyPI.
+1. Bump `version` in `pyproject.toml`.
+2. Push to `main`. The `Publish to PyPI` workflow builds and publishes via
+   [PyPI Trusted Publishing](https://docs.pypi.org/trusted-publishers/) —
+   idempotent on the version field, so re-pushing the same version is a
+   no-op.
 
 ## License
 

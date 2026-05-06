@@ -1,6 +1,11 @@
 """Optional embedding-based reranking for search results.
 
 Requires the ``rerank`` extra:  pip install 'paperhound[rerank]'
+
+Reranking is on by default in the CLI. When the extra is not installed the
+CLI silently falls back to merge-order results — the underlying ``rerank()``
+call here still raises :class:`RerankError` so library users see the failure
+explicitly.
 """
 
 from __future__ import annotations

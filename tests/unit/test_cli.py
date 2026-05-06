@@ -19,6 +19,25 @@ def runner() -> CliRunner:
     return CliRunner()
 
 
+@pytest.fixture(autouse=True)
+def _stub_rerank(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pretend the rerank extra is installed and stub the real reranker.
+
+    Reranking is on by default in the CLI; without this fixture every search
+    test would either skip rerank (when the extra is missing in the test env)
+    or try to download the SentenceTransformer model (when it is). Both states
+    drift between machines. Pinning ``is_available=True`` + an identity rerank
+    keeps the CLI path deterministic. Tests that exercise the rerank surface
+    override these by re-monkeypatching.
+    """
+    import paperhound.rerank as rerank_mod
+
+    monkeypatch.setattr(rerank_mod, "is_available", lambda: True)
+    monkeypatch.setattr(
+        rerank_mod, "rerank", lambda query, papers, model_name=None, **kw: list(papers)
+    )
+
+
 @pytest.fixture
 def fake_paper() -> Paper:
     return Paper(
@@ -1104,13 +1123,13 @@ class TestSearchRerank:
         assert result.exit_code == 0, result.output
         assert calls[0] == "custom/model"
 
-    def test_rerank_without_flag_does_not_call_rerank(
+    def test_no_rerank_flag_skips_rerank(
         self,
         runner: CliRunner,
         monkeypatch: pytest.MonkeyPatch,
         fake_paper: Paper,
     ) -> None:
-        """Without --rerank, the rerank function must not be called."""
+        """With --no-rerank, the rerank function must not be called."""
         import paperhound.rerank as rerank_mod
 
         called: list[bool] = []
@@ -1122,9 +1141,31 @@ class TestSearchRerank:
         self._patch_aggregator(monkeypatch, [fake_paper])
         monkeypatch.setattr(rerank_mod, "rerank", fake_rerank)
 
-        result = runner.invoke(cli_module.app, ["search", "transformers"])
+        result = runner.invoke(cli_module.app, ["search", "transformers", "--no-rerank"])
         assert result.exit_code == 0
         assert not called
+
+    def test_rerank_runs_by_default(
+        self,
+        runner: CliRunner,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_paper: Paper,
+    ) -> None:
+        """No flag = rerank is called (default-on)."""
+        import paperhound.rerank as rerank_mod
+
+        called: list[bool] = []
+
+        def fake_rerank(query, papers, model_name=None, **kw):
+            called.append(True)
+            return list(papers)
+
+        self._patch_aggregator(monkeypatch, [fake_paper])
+        monkeypatch.setattr(rerank_mod, "rerank", fake_rerank)
+
+        result = runner.invoke(cli_module.app, ["search", "transformers"])
+        assert result.exit_code == 0, result.output
+        assert called == [True]
 
     def test_rerank_missing_dep_exits_nonzero_with_helpful_message(
         self,
@@ -1138,8 +1179,8 @@ class TestSearchRerank:
 
         def fake_rerank(*a, **k):
             raise RerankError(
-                "Rerank requires sentence-transformers. "
-                "Install with: pip install 'paperhound[rerank]'"
+                "sentence-transformers is missing — reinstall paperhound:"
+                " pip install --upgrade paperhound"
             )
 
         self._patch_aggregator(monkeypatch, [fake_paper])
@@ -1148,7 +1189,7 @@ class TestSearchRerank:
         result = runner.invoke(cli_module.app, ["search", "transformers", "--rerank"])
         assert result.exit_code != 0
         combined = result.stdout + result.stderr
-        assert "paperhound[rerank]" in combined or "sentence-transformers" in combined
+        assert "sentence-transformers" in combined
 
     def test_rerank_wider_candidate_pool(
         self,

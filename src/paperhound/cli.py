@@ -129,7 +129,6 @@ HELP_EPILOG = (
     "  paperhound rm 2401.12345\n"
     "  paperhound refs 1706.03762 --depth 2\n"
     "  paperhound cited-by 1706.03762 --limit 10\n"
-    "  paperhound mcp\n"
     "\n"
     "\b\n"
     "Sources:     arxiv, openalex, dblp, crossref, huggingface (alias: hf),\n"
@@ -146,8 +145,9 @@ HELP_EPILOG = (
     "JSON output: search --json emits JSONL (one Paper object per line);\n"
     "             show --json emits a single compact JSON object.\n"
     "             Schema: paperhound.models.Paper (model_dump mode='json').\n"
-    "MCP server:  paperhound mcp  (requires: pip install 'paperhound[mcp]').\n"
-    "Rerank:      search --rerank  (requires: pip install 'paperhound[rerank]').\n"
+    "Rerank:      on by default when paperhound[rerank] is installed.\n"
+    "             Install: pip install 'paperhound[rerank]'.\n"
+    "             Disable for one call with --no-rerank.\n"
     "Convert:     --with-figures saves images to <stem>_assets/ (requires -o).\n"
     "             --equations latex  preserves math as $...$ / $$...$$.\n"
     "             --tables html      embeds <table> blocks instead of GFM tables.\n"
@@ -246,8 +246,8 @@ _RERANK_CANDIDATE_CAP = 50
         '  paperhound search "llm agents" --year 2020-2024 --min-citations 50\n'
         '  paperhound search "transformers" --venue NeurIPS --author Hinton\n'
         '  paperhound search "llm agents" --json | jq .\n'
-        '  paperhound search "transformers" --rerank\n'
-        '  paperhound search "vision language" --rerank'
+        '  paperhound search "transformers" --no-rerank\n'
+        '  paperhound search "vision language"'
         " --rerank-model sentence-transformers/all-MiniLM-L6-v2"
     ),
 )
@@ -307,11 +307,12 @@ def search(
     ),
     json_output: bool = typer.Option(False, "--json", help="Emit JSON instead of a Rich table."),
     do_rerank: bool = typer.Option(
-        False,
-        "--rerank",
+        True,
+        "--rerank/--no-rerank",
         help=(
             "Rerank results by embedding similarity (query vs. title+abstract)."
-            " Requires: pip install 'paperhound[rerank]'."
+            " On by default when paperhound[rerank] is installed; otherwise the"
+            " merge-order ranking is used. Pass --no-rerank to skip explicitly."
         ),
     ),
     rerank_model: str = typer.Option(
@@ -346,9 +347,13 @@ def search(
     if filters.is_empty():
         filters = None  # type: ignore[assignment]
 
-    # When reranking, fetch a wider candidate pool so the reranker has more
-    # material to work with, then slice down to the requested limit afterward.
-    if do_rerank:
+    # Decide reranking up-front: only when the user asked for it AND the
+    # optional dependency is installed. Widen the candidate pool only in that
+    # case so the reranker has more material to work with.
+    from paperhound import rerank as rerank_mod
+
+    rerank_active = do_rerank and rerank_mod.is_available()
+    if rerank_active:
         candidate_limit = min(limit * _RERANK_CANDIDATE_MULTIPLIER, _RERANK_CANDIDATE_CAP)
     else:
         candidate_limit = limit
@@ -368,9 +373,7 @@ def search(
         _exit_on_error(exc)
         return
 
-    if do_rerank and papers:
-        from paperhound import rerank as rerank_mod
-
+    if rerank_active and papers:
         try:
             papers = rerank_mod.rerank(query, papers, rerank_model)
         except RerankError as exc:
@@ -903,37 +906,3 @@ def cited_by(
     'search'.
     """
     _run_citation_command(identifier, depth, limit, source, json_output, mode="cited-by")
-
-
-# ---------------------------------------------------------------------------
-# MCP server subcommand
-# ---------------------------------------------------------------------------
-
-
-@app.command(
-    name="mcp",
-    epilog=(
-        "Requires the mcp extra:\n\n\b\n"
-        "  pip install 'paperhound[mcp]'\n"
-        "\n\b\n"
-        "Wire into Claude Code's settings.json:\n"
-        "\n\b\n"
-        '  "mcpServers": {\n'
-        '    "paperhound": {\n'
-        '      "command": "paperhound",\n'
-        '      "args": ["mcp"]\n'
-        "    }\n"
-        "  }"
-    ),
-)
-def mcp() -> None:
-    """Start an MCP server over stdio, exposing paperhound as callable tools.
-
-    Requires the optional mcp extra: pip install 'paperhound[mcp]'
-
-    Exposed tools: search, show, download, convert, library_add,
-    library_list, library_grep.
-    """
-    from paperhound.mcp_server import run
-
-    run()

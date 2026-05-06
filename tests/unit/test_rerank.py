@@ -271,7 +271,7 @@ class TestRerankMissingDep:
         monkeypatch.setattr("builtins.__import__", mock_import)
 
         paper = _make_paper()
-        with pytest.raises(RerankError, match="pip install"):
+        with pytest.raises(RerankError, match="sentence-transformers"):
             # No _encoder → will try to import sentence_transformers
             rerank("query", [paper])
 
@@ -294,4 +294,4 @@ class TestRerankMissingDep:
         with pytest.raises(RerankError) as exc_info:
             rerank("query", [paper])
 
-        assert "paperhound[rerank]" in str(exc_info.value)
+        assert "sentence-transformers" in str(exc_info.value)

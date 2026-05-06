@@ -92,7 +92,7 @@ Typical agent workflow to build a local corpus:
 ### Search — unified across providers
 
 ```bash
-paperhound search "<query>" [--limit N] [--year RANGE] [--min-citations N] [--venue STRING] [--author STRING] [--source arxiv|openalex|dblp|crossref|huggingface|semantic_scholar|core] [--timeout SECONDS] [--json] [--rerank] [--rerank-model NAME]
+paperhound search "<query>" [--limit N] [--year RANGE] [--min-citations N] [--venue STRING] [--author STRING] [--source arxiv|openalex|dblp|crossref|huggingface|semantic_scholar|core] [--timeout SECONDS] [--json] [--rerank/--no-rerank] [--rerank-model NAME]
 ```
 
 - Default `--limit` is 10. Cap it (e.g. `-n 5`) when the user asks for "a few".
@@ -113,9 +113,11 @@ paperhound search "<query>" [--limit N] [--year RANGE] [--min-citations N] [--ve
   `year`, `venue`, `url`, `pdf_url`, `citation_count`,
   `identifiers.{arxiv_id,doi,semantic_scholar_id,openalex_id,dblp_key,core_id}`,
   `sources[]`.
-- `--rerank` re-sorts results by embedding similarity (query vs. title+abstract).
-  Requires `pip install 'paperhound[rerank]'`. Default model:
-  `sentence-transformers/all-MiniLM-L6-v2`. Override with `--rerank-model NAME`.
+- Embedding rerank is **on by default** when `paperhound[rerank]` is installed
+  (`pip install 'paperhound[rerank]'`). Pass `--no-rerank` to skip it for one
+  call. Default model: `sentence-transformers/all-MiniLM-L6-v2`. Override with
+  `--rerank-model NAME`. Without the extra installed the CLI silently falls
+  back to merge-order — never errors.
 
 ### Show — abstract + metadata for a single paper
 
@@ -236,32 +238,6 @@ paperhound get 1706.03762 -o attention.md
 - **Unrecognized identifier**: `error: Unrecognized paper identifier: …`. Re-run `paperhound search` to find a canonical id.
 - **Network/provider error**: aggregator silently drops failing providers, so search still returns results from whichever provider responded; warn the user only if the merged list is empty.
 - **docling first run is slow**: it downloads model weights on first conversion. Don't retry; just wait.
-
-## MCP server (optional)
-
-paperhound ships a built-in MCP server. If you prefer direct MCP tool calls
-over shell invocations, install the optional extra and wire it once:
-
-```bash
-pip install 'paperhound[mcp]'
-```
-
-Add to `~/.claude/settings.json` (or project-level `.claude/settings.json`):
-
-```json
-{
-  "mcpServers": {
-    "paperhound": {
-      "command": "paperhound",
-      "args": ["mcp"]
-    }
-  }
-}
-```
-
-The MCP server exposes the same operations as the CLI — `search`, `show`,
-`download`, `convert`, `library_add`, `library_list`, `library_grep` — as
-structured tool calls. Use the CLI skill **or** the MCP server, not both.
 
 ## Don'ts
 
