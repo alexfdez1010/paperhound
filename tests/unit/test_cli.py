@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -89,20 +90,72 @@ def test_search_rejects_empty_query(runner: CliRunner, monkeypatch: pytest.Monke
         assert "empty" in (result.stdout + result.stderr).lower()
 
 
-def test_root_default_logging_level_is_error(
-    runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+def test_configure_logging_default_silences_libraries(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Provider warnings should not leak to stderr unless ``--verbose`` is set."""
+    """Default mode: noisy libs are pinned to CRITICAL and tqdm is disabled."""
     import logging
 
-    captured: dict = {}
-    monkeypatch.setattr(logging, "basicConfig", lambda **kw: captured.update(kw))
-    runner.invoke(cli_module.app, ["version"])
-    assert captured.get("level") == logging.ERROR
+    monkeypatch.delenv("TQDM_DISABLE", raising=False)
+    cli_module._configure_logging(verbose=False)
 
-    captured.clear()
+    assert logging.getLogger().level == logging.ERROR
+    for name in cli_module._NOISY_LOGGERS:
+        lib = logging.getLogger(name)
+        assert lib.level == logging.CRITICAL, name
+        assert lib.propagate is False, name
+    assert os.environ.get("TQDM_DISABLE") == "1"
+
+
+def test_configure_logging_verbose_enables_debug(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``--verbose`` resets noisy loggers to NOTSET so DEBUG records flow."""
+    import logging
+
+    monkeypatch.delenv("TQDM_DISABLE", raising=False)
+    # Pre-pin one library so we can prove verbose actually unpins it.
+    logging.getLogger("docling").setLevel(logging.CRITICAL)
+
+    cli_module._configure_logging(verbose=True)
+
+    assert logging.getLogger().level == logging.DEBUG
+    for name in cli_module._NOISY_LOGGERS:
+        assert logging.getLogger(name).level == logging.NOTSET, name
+    assert os.environ.get("TQDM_DISABLE") is None
+
+
+def test_root_invokes_configure_logging(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The Typer root callback should delegate to ``_configure_logging``."""
+    calls: list[bool] = []
+    monkeypatch.setattr(cli_module, "_configure_logging", lambda verbose: calls.append(verbose))
+
+    runner.invoke(cli_module.app, ["version"])
     runner.invoke(cli_module.app, ["--verbose", "version"])
-    assert captured.get("level") == logging.DEBUG
+    runner.invoke(cli_module.app, ["-v", "version"])
+
+    assert calls == [False, True, True]
+
+
+def test_library_log_emitted_under_default_is_filtered(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, fake_paper: Paper
+) -> None:
+    """Real-world regression: a docling-style INFO log must not reach stderr."""
+    import logging
+
+    def search_with_log(_query):
+        logging.getLogger("docling.document_converter").info("Going to convert document...")
+        logging.getLogger("httpx").info("HTTP Request: GET /v1/papers")
+        return [fake_paper]
+
+    fake = FakeAggregator([fake_paper])
+    fake.search = search_with_log  # type: ignore[assignment]
+    monkeypatch.setattr(cli_module, "_build_aggregator", lambda *a, **k: fake)
+
+    result = runner.invoke(cli_module.app, ["search", "transformers"])
+    assert result.exit_code == 0
+    assert "Going to convert" not in result.stderr
+    assert "HTTP Request" not in result.stderr
 
 
 def test_show_prints_abstract(
