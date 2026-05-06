@@ -397,6 +397,37 @@ def test_show_json_roundtrip(
     assert reconstructed.identifiers.arxiv_id == "2401.12345"
 
 
+def test_show_source_flag_passed_to_aggregator(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, fake_paper: Paper
+) -> None:
+    """``show -s arxiv`` must build the aggregator with only that provider."""
+    captured: dict[str, object] = {}
+
+    def fake_build(sources=None, *args, **kwargs):
+        captured["sources"] = list(sources) if sources is not None else None
+        return FakeAggregator([], lookup=fake_paper)
+
+    monkeypatch.setattr(cli_module, "_build_aggregator", fake_build)
+    result = runner.invoke(cli_module.app, ["show", "2401.12345", "-s", "arxiv"])
+    assert result.exit_code == 0
+    assert captured["sources"] == ["arxiv"]
+
+
+def test_show_source_flag_rejects_unknown(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, fake_paper: Paper
+) -> None:
+    monkeypatch.setattr(
+        cli_module,
+        "_build_aggregator",
+        cli_module._build_aggregator,
+    )
+    result = runner.invoke(cli_module.app, ["show", "2401.12345", "-s", "nope"])
+    assert result.exit_code != 0
+    assert "Unknown source" in (result.stdout + result.stderr) or "nope" in (
+        result.stdout + result.stderr
+    )
+
+
 def test_show_json_and_format_mutually_exclusive(
     runner: CliRunner, monkeypatch: pytest.MonkeyPatch, fake_paper: Paper
 ) -> None:

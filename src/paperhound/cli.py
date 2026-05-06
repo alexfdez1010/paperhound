@@ -115,6 +115,7 @@ HELP_EPILOG = (
     '  paperhound search "transformers" --venue NeurIPS --author Vaswani\n'
     '  paperhound search "llm agents" --json | jq .title\n'
     "  paperhound show 2401.12345\n"
+    "  paperhound show 2401.12345 -s arxiv\n"
     "  paperhound show 2401.12345 --json\n"
     "  paperhound show 2401.12345 --format bibtex\n"
     "  paperhound show 2401.12345 --format ris\n"
@@ -399,6 +400,7 @@ def search(
     epilog=(
         "Examples:\n\n\b\n"
         "  paperhound show 2401.12345\n"
+        "  paperhound show 2401.12345 -s arxiv\n"
         "  paperhound show 2401.12345 --format bibtex\n"
         "  paperhound show 2401.12345 --format ris\n"
         "  paperhound show 2401.12345 --format csljson\n"
@@ -407,6 +409,18 @@ def search(
 )
 def show(
     identifier: str = typer.Argument(..., help="arXiv id, DOI, Semantic Scholar id, or paper URL."),
+    source: list[str] | None = typer.Option(
+        None,
+        "--source",
+        "-s",
+        help=(
+            "Restrict the lookup to one or more providers. Choices: arxiv,"
+            " openalex, dblp, crossref, huggingface (alias: hf),"
+            " semantic_scholar (alias: s2), core. Repeatable. Useful when an"
+            " upstream aggregator returns poisoned metadata for an id"
+            " (e.g. ``-s arxiv`` to force the canonical arXiv record)."
+        ),
+    ),
     json_output: bool = typer.Option(
         False, "--json", help="Emit a single compact JSON object. Overrides --format."
     ),
@@ -430,7 +444,7 @@ def show(
             " (paperhound internal) or --format for citation export formats; not both."
         )
 
-    aggregator = _build_aggregator()
+    aggregator = _build_aggregator(source)
     try:
         paper = aggregator.get(identifier)
     except PaperhoundError as exc:

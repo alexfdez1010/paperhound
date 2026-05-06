@@ -122,11 +122,17 @@ paperhound search "<query>" [--limit N] [--year RANGE] [--min-citations N] [--ve
 ### Show — abstract + metadata for a single paper
 
 ```bash
-paperhound show <identifier> [--json] [--format markdown|bibtex|ris|csljson]
+paperhound show <identifier> [-s arxiv|openalex|dblp|crossref|hf|s2|core ...] [--json] [--format markdown|bibtex|ris|csljson]
 ```
 
 - `<identifier>` accepts: arXiv id (`2401.12345`, `cs.AI/0301001`),
   DOI (`10.1234/foo.bar`), Semantic Scholar id (40-char hex), or any paper URL.
+- `--source` / `-s` restricts the lookup to one or more providers (repeatable).
+  Use it when an upstream aggregator returns poisoned metadata for an id —
+  e.g. `paperhound show 2001.08361 -s arxiv` forces the canonical arXiv record.
+  By default paperhound auto-detects poisoning by cross-checking titles
+  between providers and drops mismatched records, but explicit `-s arxiv`
+  is the surest workaround.
 - `--json` emits a **single compact JSON object** (one line, `paperhound.models.Paper`
   schema). Mutually exclusive with `--format` — use one or the other.
 - `--format` controls the output format (default `markdown`):

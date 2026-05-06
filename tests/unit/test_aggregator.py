@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 from paperhound.models import Author, Paper, PaperIdentifier
-from paperhound.search.aggregator import SearchAggregator, _dedup_key, _normalize_title
+from paperhound.search.aggregator import (
+    SearchAggregator,
+    _dedup_key,
+    _normalize_title,
+    _titles_similar,
+)
 from paperhound.search.base import SearchProvider, SearchQuery
 
 
@@ -132,6 +137,98 @@ def test_aggregator_round_robin_skips_empty_providers() -> None:
     aggregator = SearchAggregator([FakeProvider("empty", []), FakeProvider("a", a)])
     merged = aggregator.search(SearchQuery(text="x", limit=3))
     assert [p.title for p in merged] == ["A0", "A1", "A2"]
+
+
+def test_titles_similar_accepts_minor_punctuation() -> None:
+    assert _titles_similar("Attention Is All You Need", "Attention is all you need!")
+
+
+def test_titles_similar_rejects_unrelated_records() -> None:
+    assert not _titles_similar(
+        "Scaling Laws for Neural Language Models",
+        "A clinical study of dust mite allergy in pediatric asthma",
+    )
+
+
+def test_aggregator_get_drops_poisoned_record_for_arxiv_id() -> None:
+    """OpenAlex sometimes hijacks an arXiv id with junk metadata. Drop it."""
+    arxiv_paper = Paper(
+        title="Scaling Laws for Neural Language Models",
+        abstract="We study empirical scaling laws.",
+        identifiers=PaperIdentifier(arxiv_id="2001.08361"),
+        sources=["arxiv"],
+    )
+    poisoned = Paper(
+        title="Some completely unrelated junk paper from 1972",
+        abstract="Lorem ipsum dolor sit amet.",
+        identifiers=PaperIdentifier(arxiv_id="2001.08361", openalex_id="W123"),
+        sources=["openalex"],
+    )
+    aggregator = SearchAggregator(
+        [
+            FakeProvider("arxiv", [], lookup=arxiv_paper),
+            FakeProvider("openalex", [], lookup=poisoned),
+        ]
+    )
+    paper = aggregator.get("2001.08361")
+    assert paper is not None
+    assert paper.title == "Scaling Laws for Neural Language Models"
+    assert paper.abstract == "We study empirical scaling laws."
+    # Poisoned record contributed neither identifier nor source.
+    assert paper.sources == ["arxiv"]
+    assert paper.identifiers.openalex_id is None
+
+
+def test_aggregator_get_keeps_consistent_record_for_arxiv_id() -> None:
+    arxiv_paper = Paper(
+        title="Attention Is All You Need",
+        identifiers=PaperIdentifier(arxiv_id="1706.03762"),
+        sources=["arxiv"],
+    )
+    openalex_paper = Paper(
+        title="Attention is all you need.",
+        abstract="From OpenAlex.",
+        identifiers=PaperIdentifier(arxiv_id="1706.03762", openalex_id="W42"),
+        sources=["openalex"],
+    )
+    aggregator = SearchAggregator(
+        [
+            FakeProvider("arxiv", [], lookup=arxiv_paper),
+            FakeProvider("openalex", [], lookup=openalex_paper),
+        ]
+    )
+    paper = aggregator.get("1706.03762")
+    assert paper is not None
+    assert paper.abstract == "From OpenAlex."
+    assert paper.identifiers.openalex_id == "W42"
+    assert sorted(paper.sources) == ["arxiv", "openalex"]
+
+
+def test_aggregator_get_uses_arxiv_as_base_regardless_of_completion_order() -> None:
+    """Even if openalex finishes first, arxiv stays the source of truth for arxiv ids."""
+    arxiv_paper = Paper(
+        title="Chain-of-Thought Prompting Elicits Reasoning in Large Language Models",
+        identifiers=PaperIdentifier(arxiv_id="2201.11903"),
+        sources=["arxiv"],
+    )
+    poisoned = Paper(
+        title="An unrelated dental hygiene survey",
+        abstract="Junk abstract.",
+        identifiers=PaperIdentifier(arxiv_id="2201.11903"),
+        sources=["openalex"],
+    )
+    # Provider order matters for tie-breaking but the authoritative pick must
+    # win regardless. Put openalex first to prove it.
+    aggregator = SearchAggregator(
+        [
+            FakeProvider("openalex", [], lookup=poisoned),
+            FakeProvider("arxiv", [], lookup=arxiv_paper),
+        ]
+    )
+    paper = aggregator.get("2201.11903")
+    assert paper is not None
+    assert "Chain-of-Thought" in paper.title
+    assert paper.abstract is None  # poisoned abstract dropped
 
 
 def test_aggregator_round_robin_dedupes_within_round() -> None:

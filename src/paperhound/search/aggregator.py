@@ -7,7 +7,9 @@ import re
 from collections.abc import Iterable
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 
+from paperhound.errors import IdentifierError
 from paperhound.filtering import apply_filters
+from paperhound.identifiers import IdentifierKind, detect
 from paperhound.models import Paper
 from paperhound.search.base import Capability, SearchProvider, SearchQuery
 
@@ -20,9 +22,38 @@ DEFAULT_TIMEOUT = 10.0
 
 _TITLE_NORMALIZE_RE = re.compile(r"[^a-z0-9]+")
 
+# Jaccard threshold for deciding two titles describe the same paper. Tuned
+# for OpenAlex/Crossref records that occasionally hijack a slot with junk
+# metadata while keeping the requested arXiv id / DOI: in practice the
+# legitimate record shares >=0.5 of its tokens with the authoritative one,
+# while a hijacker shares well under 0.2.
+_TITLE_SIMILARITY_THRESHOLD = 0.5
+
+# Authoritative provider for a given identifier kind. The authoritative
+# record's title/abstract is trusted; non-authoritative records whose title
+# disagrees are dropped to avoid metadata poisoning across providers.
+_AUTHORITATIVE_PROVIDER: dict[IdentifierKind, tuple[str, ...]] = {
+    IdentifierKind.ARXIV: ("arxiv",),
+    IdentifierKind.DOI: ("crossref", "openalex"),
+    IdentifierKind.SEMANTIC_SCHOLAR: ("semantic_scholar",),
+}
+
 
 def _normalize_title(title: str) -> str:
     return _TITLE_NORMALIZE_RE.sub(" ", title.lower()).strip()
+
+
+def _title_tokens(title: str) -> set[str]:
+    return {tok for tok in _normalize_title(title).split() if tok}
+
+
+def _titles_similar(a: str, b: str, threshold: float = _TITLE_SIMILARITY_THRESHOLD) -> bool:
+    """Token-Jaccard similarity check used to detect poisoned upstream records."""
+    ta, tb = _title_tokens(a), _title_tokens(b)
+    if not ta or not tb:
+        # Can't judge without tokens — give the upstream the benefit of the doubt.
+        return True
+    return len(ta & tb) / len(ta | tb) >= threshold
 
 
 def _dedup_key(paper: Paper) -> str:
@@ -164,7 +195,7 @@ class SearchAggregator:
         try:
             futures = {pool.submit(p.get, identifier): p for p in eligible}
             done, not_done = wait(futures, timeout=self._timeout)
-            merged: Paper | None = None
+            results: dict[str, Paper] = {}
             for future in done:
                 provider = futures[future]
                 try:
@@ -174,7 +205,7 @@ class SearchAggregator:
                     continue
                 if found is None:
                     continue
-                merged = found if merged is None else merged.merge(found)
+                results[provider.name] = found
             for future in not_done:
                 provider = futures[future]
                 logger.warning(
@@ -183,6 +214,51 @@ class SearchAggregator:
                     self._timeout,
                 )
                 future.cancel()
-            return merged
+            return self._merge_lookups(identifier, results)
         finally:
             pool.shutdown(wait=False, cancel_futures=True)
+
+    def _merge_lookups(self, identifier: str, results: dict[str, Paper]) -> Paper | None:
+        """Merge per-provider lookup results, dropping records that look poisoned.
+
+        The authoritative provider for the identifier (e.g. arXiv for an arXiv id)
+        defines the canonical title. Other providers must share at least
+        ``_TITLE_SIMILARITY_THRESHOLD`` token overlap or they are discarded —
+        upstream aggregators occasionally serve junk records that keep the
+        requested id but carry an unrelated paper's title and abstract.
+        """
+        if not results:
+            return None
+        auth_name = self._pick_authoritative(identifier, results)
+        order = [p.name for p in self._providers if p.name in results]
+        if auth_name is None:
+            auth_name = order[0]
+        base = results[auth_name]
+        for name in order:
+            if name == auth_name:
+                continue
+            other = results[name]
+            if not _titles_similar(base.title, other.title):
+                logger.warning(
+                    "Dropping %s lookup for %s — title mismatch with %s "
+                    "(%r vs %r); likely upstream metadata poisoning",
+                    name,
+                    identifier,
+                    auth_name,
+                    other.title,
+                    base.title,
+                )
+                continue
+            base = base.merge(other)
+        return base
+
+    @staticmethod
+    def _pick_authoritative(identifier: str, results: dict[str, Paper]) -> str | None:
+        try:
+            kind, _ = detect(identifier)
+        except IdentifierError:
+            return None
+        for candidate in _AUTHORITATIVE_PROVIDER.get(kind, ()):
+            if candidate in results:
+                return candidate
+        return None

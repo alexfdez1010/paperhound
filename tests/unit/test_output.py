@@ -146,18 +146,20 @@ def test_papers_to_jsonl_multiple() -> None:
 
 
 @pytest.mark.parametrize(
-    "title",
+    "title,expected",
     [
-        "",
-        "A" * 500,
-        "Special: <>&\"'",
-        "Unicode: 中文 العربية Ελληνικά",
-        "Newline\nin\ntitle",
+        ("", ""),
+        ("A" * 500, "A" * 500),
+        ("Special: <>&\"'", "Special: <>&\"'"),
+        ("Unicode: 中文 العربية Ελληνικά", "Unicode: 中文 العربية Ελληνικά"),
+        # Embedded newlines are normalized at the model layer (provider feeds
+        # often wrap long titles); the JSON line must reflect that.
+        ("Newline\nin\ntitle", "Newline in title"),
     ],
 )
-def test_paper_to_json_line_edge_case_titles(title: str) -> None:
+def test_paper_to_json_line_edge_case_titles(title: str, expected: str) -> None:
     """Edge-case titles must serialise and round-trip without error."""
     paper = Paper(title=title, sources=[])
     line = paper_to_json_line(paper)
     assert "\n" not in line  # still a single line
-    assert json.loads(line)["title"] == title
+    assert json.loads(line)["title"] == expected

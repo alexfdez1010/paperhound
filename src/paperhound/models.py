@@ -2,9 +2,19 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+_WHITESPACE_RE = re.compile(r"\s+")
+
+
+def _normalize_whitespace(value: str | None) -> str | None:
+    """Collapse runs of whitespace (incl. embedded newlines/tabs) into single spaces."""
+    if value is None:
+        return None
+    return _WHITESPACE_RE.sub(" ", value).strip() or None
 
 
 @dataclass
@@ -76,6 +86,19 @@ class Paper(BaseModel):
     citation_count: int | None = None
     identifiers: PaperIdentifier = Field(default_factory=PaperIdentifier)
     sources: list[str] = Field(default_factory=list)
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def _strip_title_whitespace(cls, v: str) -> str:
+        # Provider responses sometimes embed newlines/tabs in titles (arXiv
+        # wraps long titles, OpenAlex echoes the source HTML). Collapse them
+        # so downstream rendering and citation export stay clean.
+        return _normalize_whitespace(v) or ""
+
+    @field_validator("abstract", mode="before")
+    @classmethod
+    def _strip_abstract_whitespace(cls, v: str | None) -> str | None:
+        return _normalize_whitespace(v)
 
     @property
     def primary_id(self) -> str:

@@ -64,3 +64,24 @@ def test_merge_prefers_existing_values() -> None:
 def test_author_names() -> None:
     paper = make_paper()
     assert paper.author_names() == ["Ashish Vaswani", "Noam Shazeer"]
+
+
+def test_title_strips_embedded_whitespace() -> None:
+    """arXiv wraps long titles across lines — collapse those breaks."""
+    paper = make_paper(title="Exploring the Limits of\nTransfer Learning")
+    assert paper.title == "Exploring the Limits of Transfer Learning"
+
+
+def test_title_collapses_runs_of_whitespace() -> None:
+    paper = make_paper(title="A   weird\t\ttitle\n\nstring")
+    assert paper.title == "A weird title string"
+
+
+def test_abstract_strips_embedded_whitespace() -> None:
+    paper = make_paper(abstract="line one\n\nline   two")
+    assert paper.abstract == "line one line two"
+
+
+def test_abstract_blank_becomes_none() -> None:
+    paper = make_paper(abstract="   \n\t  ")
+    assert paper.abstract is None

@@ -154,6 +154,7 @@ paperhound search "diffusion transformers" --limit 5
 paperhound show 2401.12345
 paperhound show 10.1038/s41586-020-2649-2          # DOI works too
 paperhound show https://arxiv.org/abs/1706.03762   # ...and URLs
+paperhound show 2001.08361 -s arxiv                # force a single provider
 
 # Download the PDF
 paperhound download 1706.03762 -o ./papers/
@@ -189,7 +190,7 @@ dblp_key,core_id}`, `sources[]`.
 | Command | Description |
 |---|---|
 | `paperhound search <query>` | Run a unified search. `--limit`, `--source arxiv\|openalex\|dblp\|crossref\|huggingface\|semantic_scholar\|core` (repeatable), `--year RANGE`, `--min-citations N`, `--venue STRING`, `--author STRING`, `--timeout`, `--json` (JSONL output), `--rerank/--no-rerank` (default on when `paperhound[rerank]` is installed), `--rerank-model`. |
-| `paperhound show <id>` | Fetch a paper's metadata + abstract. `--format markdown\|bibtex\|ris\|csljson` (default `markdown`), `--json` (compact JSON; mutually exclusive with `--format`). |
+| `paperhound show <id>` | Fetch a paper's metadata + abstract. `--source arxiv\|openalex\|dblp\|crossref\|huggingface\|semantic_scholar\|core` (`-s`, repeatable — restrict the lookup, useful when an upstream aggregator returns poisoned metadata), `--format markdown\|bibtex\|ris\|csljson` (default `markdown`), `--json` (compact JSON; mutually exclusive with `--format`). |
 | `paperhound download <id> -o <path>` | Download a paper PDF. |
 | `paperhound convert <pdf> -o <md>` | Convert a PDF (or any docling-supported file/URL) to Markdown. `--with-figures` saves embedded images to `<stem>_assets/` and references them in the output. `--equations latex` preserves math as `$...$`/`$$...$$`. `--tables html` embeds `<table>` blocks instead of GFM pipe tables. |
 | `paperhound get <id> -o <md>` | Download + convert in one step. `--keep-pdf` to keep the PDF. |
