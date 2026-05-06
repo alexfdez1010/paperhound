@@ -93,6 +93,21 @@ def test_search_raises_on_error() -> None:
 
 
 @respx.mock
+def test_search_unescapes_html_entities_in_title_and_abstract() -> None:
+    item = _sample_item()
+    item["title"] = ["Foo &amp; Bar &lt;baz&gt;"]
+    item["abstract"] = "<jats:p>Alpha &amp; Beta</jats:p>"
+    respx.get(f"{CROSSREF_BASE_URL}/works").mock(
+        return_value=httpx.Response(200, json={"message": {"items": [item]}})
+    )
+    with CrossrefProvider() as provider:
+        papers = provider.search(SearchQuery(text="x", limit=1))
+    assert papers[0].title == "Foo & Bar <baz>"
+    assert "&amp;" not in (papers[0].abstract or "")
+    assert "Alpha & Beta" in (papers[0].abstract or "")
+
+
+@respx.mock
 def test_user_agent_includes_mailto() -> None:
     route = respx.get(f"{CROSSREF_BASE_URL}/works").mock(
         return_value=httpx.Response(200, json={"message": {"items": []}})

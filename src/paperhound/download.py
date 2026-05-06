@@ -54,6 +54,11 @@ def download_pdf(
 ) -> Path:
     """Stream the PDF at ``url`` to ``destination`` and return the final path."""
     destination = Path(destination)
+    # Treat extension-less missing paths as directories so `-o ./papers`
+    # creates `./papers/<id>.pdf` instead of a binary file literally named
+    # `papers`. Paths with a suffix (e.g. `paper.pdf`) keep file semantics.
+    if not destination.exists() and not destination.suffix:
+        destination.mkdir(parents=True, exist_ok=True)
     if destination.is_dir():
         destination = destination / f"{_safe_filename(Path(url).stem)}.pdf"
     destination.parent.mkdir(parents=True, exist_ok=True)

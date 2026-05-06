@@ -52,7 +52,8 @@ HELP_EPILOG = (
     "Sources:     arxiv, openalex, dblp, crossref, huggingface (alias: hf),\n"
     "             semantic_scholar (alias: s2), core. Defaults to arxiv +\n"
     "             openalex + dblp + crossref + huggingface (parallel, 10s\n"
-    "             budget; partial results returned on timeout).\n"
+    "             budget; round-robin merge across providers; partial\n"
+    "             results returned on timeout).\n"
     "Identifiers: arXiv id (2401.12345), DOI, Semantic Scholar id, or paper URL.\n"
     "Docs:        https://github.com/alexfdez1010/paperhound"
 )
@@ -119,7 +120,7 @@ def _root(
     ),
 ) -> None:
     logging.basicConfig(
-        level=logging.DEBUG if verbose else logging.WARNING,
+        level=logging.DEBUG if verbose else logging.ERROR,
         format="%(levelname)s %(name)s: %(message)s",
     )
 
@@ -171,6 +172,8 @@ def search(
     json_output: bool = typer.Option(False, "--json", help="Emit JSON instead of a Rich table."),
 ) -> None:
     """Search papers across providers and print merged, deduplicated results."""
+    if not query.strip():
+        raise typer.BadParameter("Query must not be empty.")
     aggregator = _build_aggregator(source, timeout=timeout)
     try:
         papers = aggregator.search(
@@ -246,8 +249,11 @@ def download(
         "--output",
         "-o",
         help=(
-            "Destination file or directory. If a directory, the file is named "
-            "after the identifier. Defaults to the current directory."
+            "Destination file or directory. Paths with a suffix (e.g. "
+            "paper.pdf) are treated as files; paths without one (./papers, "
+            "./papers/) as directories — they are created if missing and the "
+            "file is named after the identifier. Defaults to the current "
+            "directory."
         ),
     ),
 ) -> Path:

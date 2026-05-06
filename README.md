@@ -12,9 +12,10 @@ is good enough to feed straight into an LLM context.
 
 - 🔎 **Unified search** — one query, many backends. arXiv, OpenAlex, DBLP,
   Crossref and Hugging Face Papers (and optionally Semantic Scholar / CORE) are
-  queried in parallel with a 10-second budget; results are merged and
-  deduplicated. Slow providers are dropped silently — the CLI returns whatever
-  came back in time.
+  queried in parallel with a 10-second budget. Results are merged round-robin
+  (one from each provider, then the next, …) so a fast provider can't
+  monopolize the top-N — and deduplicated by arXiv id / DOI / title. Slow
+  providers are dropped silently — the CLI returns whatever came back in time.
 - 📄 **Inspect before downloading** — `paperhound show <id>` prints the
   abstract and metadata so you can decide if it's worth a download.
 - ⬇️ **Download by identifier** — arXiv id, DOI, Semantic Scholar paper id, or

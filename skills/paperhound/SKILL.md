@@ -10,8 +10,10 @@ Crossref and Hugging Face Papers (and optionally Semantic Scholar / CORE) in
 parallel under a 10-second budget, resolves identifiers (arXiv id, DOI,
 Semantic Scholar paper id, OpenAlex Work id, or any paper URL), downloads the
 PDF, and converts it to Markdown using
-[docling](https://github.com/docling-project/docling). Slow providers are
-dropped silently — you always get whatever finished within the budget.
+[docling](https://github.com/docling-project/docling). Results are merged
+round-robin across providers (so the top-N has source diversity, not just the
+fastest provider), then deduplicated. Slow providers are dropped silently —
+you always get whatever finished within the budget.
 
 ## Setup check
 
@@ -88,6 +90,9 @@ paperhound download <identifier> -o <path-or-dir>
 - For arXiv ids the PDF URL is constructed directly.
 - For DOIs / S2 ids paperhound looks up the open-access PDF via Semantic
   Scholar; if no open-access version exists the command exits non-zero.
+- `-o` semantics: a path with a suffix (`paper.pdf`) is treated as a file; a
+  path without one (`./papers`, `./papers/`) is treated as a directory and
+  the file is named after the identifier. Missing directories are created.
 
 ### Convert — PDF → Markdown via docling
 

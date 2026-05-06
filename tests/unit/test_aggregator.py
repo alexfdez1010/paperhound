@@ -113,3 +113,32 @@ def test_aggregator_respects_limit() -> None:
     aggregator = SearchAggregator([FakeProvider("a", papers)])
     merged = aggregator.search(SearchQuery(text="x", limit=2))
     assert len(merged) == 2
+
+
+def test_aggregator_round_robin_interleaves_providers() -> None:
+    """One greedy provider returning ``limit`` rows must not starve the others."""
+    a = [make_paper(f"A{i}", arxiv_id=f"1000.000{i}") for i in range(5)]
+    b = [make_paper(f"B{i}", arxiv_id=f"2000.000{i}") for i in range(5)]
+    c = [make_paper(f"C{i}", arxiv_id=f"3000.000{i}") for i in range(5)]
+    aggregator = SearchAggregator(
+        [FakeProvider("a", a), FakeProvider("b", b), FakeProvider("c", c)]
+    )
+    merged = aggregator.search(SearchQuery(text="x", limit=6))
+    assert [p.title for p in merged] == ["A0", "B0", "C0", "A1", "B1", "C1"]
+
+
+def test_aggregator_round_robin_skips_empty_providers() -> None:
+    a = [make_paper(f"A{i}", arxiv_id=f"1000.000{i}") for i in range(3)]
+    aggregator = SearchAggregator([FakeProvider("empty", []), FakeProvider("a", a)])
+    merged = aggregator.search(SearchQuery(text="x", limit=3))
+    assert [p.title for p in merged] == ["A0", "A1", "A2"]
+
+
+def test_aggregator_round_robin_dedupes_within_round() -> None:
+    """Same paper from two providers in the same round merges, doesn't duplicate."""
+    a = [make_paper("Same", arxiv_id="9999.0001", source="arxiv")]
+    b = [make_paper("Same", arxiv_id="9999.0001", source="openalex")]
+    aggregator = SearchAggregator([FakeProvider("a", a), FakeProvider("b", b)])
+    merged = aggregator.search(SearchQuery(text="x", limit=10))
+    assert len(merged) == 1
+    assert sorted(merged[0].sources) == ["arxiv", "openalex"]

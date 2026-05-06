@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import logging
 import os
 from typing import Any
@@ -19,9 +20,18 @@ CROSSREF_BASE_URL = "https://api.crossref.org"
 
 
 def _join_title(value: Any) -> str:
+    # Crossref returns titles with raw HTML entities (`&amp;`, `&lt;`, JATS).
     if isinstance(value, list):
-        return " ".join(part for part in value if part).strip()
-    return str(value or "").strip()
+        joined = " ".join(part for part in value if part).strip()
+    else:
+        joined = str(value or "").strip()
+    return html.unescape(joined)
+
+
+def _clean_abstract(value: Any) -> str | None:
+    if value is None:
+        return None
+    return html.unescape(str(value))
 
 
 def _year_from_issued(issued: dict[str, Any] | None) -> int | None:
@@ -66,7 +76,7 @@ def _payload_to_paper(item: dict[str, Any]) -> Paper:
     return Paper(
         title=_join_title(item.get("title")),
         authors=authors,
-        abstract=item.get("abstract"),
+        abstract=_clean_abstract(item.get("abstract")),
         year=_year_from_issued(item.get("issued")),
         venue=venue,
         url=item.get("URL"),

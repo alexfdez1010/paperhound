@@ -89,48 +89,66 @@ class SearchAggregator:
         eligible = self._eligible(Capability.TEXT_SEARCH)
         if not eligible:
             return []
-        results: dict[str, Paper] = {}
-        order: list[str] = []
         # Use a non-context-managed pool so we can return without waiting on
         # slow providers — `wait(timeout=...)` returns and we discard pending.
         pool = ThreadPoolExecutor(max_workers=self._max_workers)
         try:
-            futures = {pool.submit(p.search, query): p for p in eligible}
-            collected = self._wait_all(futures)
-            for _provider, papers in collected:
-                for paper in papers:
-                    key = _dedup_key(paper)
-                    if key in results:
-                        results[key] = results[key].merge(paper)
-                    else:
-                        results[key] = paper
-                        order.append(key)
+            future_for = {p: pool.submit(p.search, query) for p in eligible}
+            wait(list(future_for.values()), timeout=self._timeout)
+            per_provider = self._collect_per_provider(future_for)
         finally:
             pool.shutdown(wait=False, cancel_futures=True)
-        return [results[k] for k in order][: query.limit]
+        return self._round_robin_merge(per_provider, query.limit)
 
-    def _wait_all(
+    def _collect_per_provider(
         self,
-        futures: dict[Future[list[Paper]], SearchProvider],
-    ) -> list[tuple[SearchProvider, list[Paper]]]:
-        """Wait up to ``self._timeout`` for all futures; return finished ones."""
-        done, not_done = wait(futures, timeout=self._timeout)
-        out: list[tuple[SearchProvider, list[Paper]]] = []
-        for future in done:
-            provider = futures[future]
+        future_for: dict[SearchProvider, Future[list[Paper]]],
+    ) -> list[list[Paper]]:
+        """Materialize each provider's result list in the order providers were given.
+
+        Slow providers (still pending after the budget) and failing providers
+        contribute an empty list so the round-robin merge stays positional.
+        """
+        per_provider: list[list[Paper]] = []
+        for provider, future in future_for.items():
+            if not future.done():
+                logger.warning(
+                    "Provider %s exceeded %.1fs budget; dropping its results",
+                    provider.name,
+                    self._timeout,
+                )
+                future.cancel()
+                per_provider.append([])
+                continue
             try:
-                out.append((provider, future.result()))
+                per_provider.append(list(future.result()))
             except Exception as exc:
                 logger.warning("Provider %s failed: %s", provider.name, exc)
-        for future in not_done:
-            provider = futures[future]
-            logger.warning(
-                "Provider %s exceeded %.1fs budget; dropping its results",
-                provider.name,
-                self._timeout,
-            )
-            future.cancel()
-        return out
+                per_provider.append([])
+        return per_provider
+
+    @staticmethod
+    def _round_robin_merge(per_provider: list[list[Paper]], limit: int) -> list[Paper]:
+        """Interleave provider results — i-th of each, then (i+1)-th of each — and dedup.
+
+        This preserves source diversity in the top-N: a fast provider returning
+        100 rows can no longer monopolize every slot.
+        """
+        results: dict[str, Paper] = {}
+        order: list[str] = []
+        max_rows = max((len(rs) for rs in per_provider), default=0)
+        for i in range(max_rows):
+            for rs in per_provider:
+                if i >= len(rs):
+                    continue
+                paper = rs[i]
+                key = _dedup_key(paper)
+                if key in results:
+                    results[key] = results[key].merge(paper)
+                else:
+                    results[key] = paper
+                    order.append(key)
+        return [results[k] for k in order][:limit]
 
     def get(self, identifier: str) -> Paper | None:
         eligible = self._eligible(Capability.ID_LOOKUP)

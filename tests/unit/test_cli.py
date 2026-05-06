@@ -76,6 +76,35 @@ def test_search_no_results(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -
     assert "No results" in result.stderr
 
 
+def test_search_rejects_empty_query(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Empty / whitespace queries must fail before any provider is hit."""
+
+    def boom(*_a, **_k):
+        raise AssertionError("aggregator should not be built for an empty query")
+
+    monkeypatch.setattr(cli_module, "_build_aggregator", boom)
+    for q in ("", "   ", "\t\n"):
+        result = runner.invoke(cli_module.app, ["search", q])
+        assert result.exit_code != 0, f"expected non-zero exit for query {q!r}"
+        assert "empty" in (result.stdout + result.stderr).lower()
+
+
+def test_root_default_logging_level_is_error(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Provider warnings should not leak to stderr unless ``--verbose`` is set."""
+    import logging
+
+    captured: dict = {}
+    monkeypatch.setattr(logging, "basicConfig", lambda **kw: captured.update(kw))
+    runner.invoke(cli_module.app, ["version"])
+    assert captured.get("level") == logging.ERROR
+
+    captured.clear()
+    runner.invoke(cli_module.app, ["--verbose", "version"])
+    assert captured.get("level") == logging.DEBUG
+
+
 def test_show_prints_abstract(
     runner: CliRunner, monkeypatch: pytest.MonkeyPatch, fake_paper: Paper
 ) -> None:

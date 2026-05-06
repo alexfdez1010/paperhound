@@ -61,6 +61,32 @@ def test_download_pdf_chooses_filename_when_directory(tmp_path: Path) -> None:
 
 
 @respx.mock
+def test_download_pdf_creates_dir_for_missing_extensionless_path(tmp_path: Path) -> None:
+    """`-o ./papers` (no slash, no suffix, doesn't exist) → create dir, file inside."""
+    respx.get("https://arxiv.org/pdf/2401.12345.pdf").mock(
+        return_value=httpx.Response(200, content=b"%PDF")
+    )
+    dest = tmp_path / "papers"
+    assert not dest.exists()
+    result = download_pdf("https://arxiv.org/pdf/2401.12345.pdf", dest)
+    assert dest.is_dir(), "destination should have been created as a directory"
+    assert result.parent == dest
+    assert result.suffix == ".pdf"
+
+
+@respx.mock
+def test_download_pdf_keeps_explicit_filename_with_suffix(tmp_path: Path) -> None:
+    """`-o paper.pdf` (suffix present) keeps file behavior even when missing."""
+    respx.get("https://arxiv.org/pdf/2401.12345.pdf").mock(
+        return_value=httpx.Response(200, content=b"%PDF")
+    )
+    dest = tmp_path / "out" / "paper.pdf"
+    result = download_pdf("https://arxiv.org/pdf/2401.12345.pdf", dest)
+    assert result == dest
+    assert dest.is_file()
+
+
+@respx.mock
 def test_download_pdf_raises_on_http_error(tmp_path: Path) -> None:
     respx.get("https://arxiv.org/pdf/missing.pdf").mock(return_value=httpx.Response(404))
     with pytest.raises(DownloadError):
