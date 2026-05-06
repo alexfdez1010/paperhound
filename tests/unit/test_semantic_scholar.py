@@ -7,6 +7,7 @@ import pytest
 import respx
 
 from paperhound.errors import ProviderError
+from paperhound.models import SearchFilters
 from paperhound.search.base import SearchQuery
 from paperhound.search.semantic_scholar import S2_BASE_URL, SemanticScholarProvider
 
@@ -132,3 +133,26 @@ def test_search_raises_rate_limit_after_retries_exhausted() -> None:
         with pytest.raises(ProviderError) as info:
             p.search(SearchQuery(text="x", limit=1))
     assert "rate-limited" in str(info.value)
+
+
+@respx.mock
+def test_search_pushes_down_min_citations() -> None:
+    route = respx.get(f"{S2_BASE_URL}/paper/search").mock(
+        return_value=httpx.Response(200, json={"data": []})
+    )
+    filters = SearchFilters(min_citations=100)
+    with SemanticScholarProvider() as provider:
+        provider.search(SearchQuery(text="x", limit=3, filters=filters))
+    assert route.calls[0].request.url.params["minCitationCount"] == "100"
+
+
+@respx.mock
+def test_search_pushes_down_year_from_filters_when_query_root_empty() -> None:
+    """year_min/year_max from SearchFilters are pushed down to S2's year param."""
+    route = respx.get(f"{S2_BASE_URL}/paper/search").mock(
+        return_value=httpx.Response(200, json={"data": []})
+    )
+    filters = SearchFilters(year_min=2019, year_max=2022)
+    with SemanticScholarProvider() as provider:
+        provider.search(SearchQuery(text="x", limit=3, filters=filters))
+    assert route.calls[0].request.url.params["year"] == "2019-2022"

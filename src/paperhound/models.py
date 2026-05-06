@@ -2,7 +2,32 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from pydantic import BaseModel, Field
+
+
+@dataclass
+class SearchFilters:
+    """Optional filters applied to a search (push-down where supported, client-side otherwise).
+
+    Missing fields on a Paper (None values) are treated as follows:
+    - year_min / year_max: paper is kept (we cannot verify the filter).
+    - min_citations: paper is excluded (conservative — user asked for a floor).
+    - venue / author: paper is kept (we cannot verify the filter).
+    """
+
+    year_min: int | None = None
+    year_max: int | None = None
+    min_citations: int | None = None
+    venue: str | None = None
+    author: str | None = None
+
+    def is_empty(self) -> bool:
+        return all(
+            v is None
+            for v in (self.year_min, self.year_max, self.min_citations, self.venue, self.author)
+        )
 
 
 class Author(BaseModel):

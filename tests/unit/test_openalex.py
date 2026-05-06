@@ -7,6 +7,7 @@ import pytest
 import respx
 
 from paperhound.errors import ProviderError
+from paperhound.models import SearchFilters
 from paperhound.search.base import SearchQuery
 from paperhound.search.openalex import OPENALEX_BASE_URL, OpenAlexProvider
 
@@ -116,3 +117,40 @@ def test_mailto_passed_when_provided() -> None:
     with OpenAlexProvider(mailto="me@example.com") as provider:
         provider.search(SearchQuery(text="x", limit=1))
     assert route.calls[0].request.url.params["mailto"] == "me@example.com"
+
+
+@respx.mock
+def test_search_pushes_down_min_citations() -> None:
+    route = respx.get(f"{OPENALEX_BASE_URL}/works").mock(
+        return_value=httpx.Response(200, json={"results": []})
+    )
+    filters = SearchFilters(min_citations=50)
+    with OpenAlexProvider() as provider:
+        provider.search(SearchQuery(text="x", limit=2, filters=filters))
+    filter_param = route.calls[0].request.url.params["filter"]
+    assert "cited_by_count:" in filter_param
+
+
+@respx.mock
+def test_search_pushes_down_author_filter() -> None:
+    route = respx.get(f"{OPENALEX_BASE_URL}/works").mock(
+        return_value=httpx.Response(200, json={"results": []})
+    )
+    filters = SearchFilters(author="Hinton")
+    with OpenAlexProvider() as provider:
+        provider.search(SearchQuery(text="x", limit=2, filters=filters))
+    filter_param = route.calls[0].request.url.params["filter"]
+    assert "authorships.author.display_name.search:Hinton" in filter_param
+
+
+@respx.mock
+def test_search_pushes_down_year_from_filters_when_query_root_empty() -> None:
+    """year_min/year_max in SearchFilters (not query root) are still pushed down."""
+    route = respx.get(f"{OPENALEX_BASE_URL}/works").mock(
+        return_value=httpx.Response(200, json={"results": []})
+    )
+    filters = SearchFilters(year_min=2021, year_max=2023)
+    with OpenAlexProvider() as provider:
+        provider.search(SearchQuery(text="x", limit=2, filters=filters))
+    filter_param = route.calls[0].request.url.params["filter"]
+    assert "from_publication_date:2021-01-01" in filter_param

@@ -144,6 +144,116 @@ def test_search_rejects_empty_query(runner: CliRunner, monkeypatch: pytest.Monke
         assert "empty" in (result.stdout + result.stderr).lower()
 
 
+class FilterCapturingAggregator:
+    """Fake aggregator that records the SearchQuery it received."""
+
+    def __init__(self, papers: list[Paper]) -> None:
+        self.papers = papers
+        self.last_query = None
+
+    def search(self, query) -> list[Paper]:
+        self.last_query = query
+        return list(self.papers)
+
+    def get(self, _identifier: str) -> Paper | None:
+        return None
+
+
+def test_search_year_single_wires_through(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, fake_paper: Paper
+) -> None:
+    agg = FilterCapturingAggregator([fake_paper])
+    monkeypatch.setattr(cli_module, "_build_aggregator", lambda *a, **kw: agg)
+    result = runner.invoke(cli_module.app, ["search", "x", "--year", "2024"])
+    assert result.exit_code == 0
+    assert agg.last_query is not None
+    assert agg.last_query.year_min == 2024
+    assert agg.last_query.year_max == 2024
+
+
+def test_search_year_range_wires_through(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, fake_paper: Paper
+) -> None:
+    agg = FilterCapturingAggregator([fake_paper])
+    monkeypatch.setattr(cli_module, "_build_aggregator", lambda *a, **kw: agg)
+    result = runner.invoke(cli_module.app, ["search", "x", "--year", "2023-2026"])
+    assert result.exit_code == 0
+    assert agg.last_query.year_min == 2023
+    assert agg.last_query.year_max == 2026
+
+
+def test_search_year_open_high_wires_through(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, fake_paper: Paper
+) -> None:
+    agg = FilterCapturingAggregator([fake_paper])
+    monkeypatch.setattr(cli_module, "_build_aggregator", lambda *a, **kw: agg)
+    result = runner.invoke(cli_module.app, ["search", "x", "--year", "2023-"])
+    assert result.exit_code == 0
+    assert agg.last_query.year_min == 2023
+    assert agg.last_query.year_max is None
+
+
+def test_search_min_citations_wires_through(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, fake_paper: Paper
+) -> None:
+    agg = FilterCapturingAggregator([fake_paper])
+    monkeypatch.setattr(cli_module, "_build_aggregator", lambda *a, **kw: agg)
+    result = runner.invoke(cli_module.app, ["search", "x", "--min-citations", "100"])
+    assert result.exit_code == 0
+    assert agg.last_query.filters is not None
+    assert agg.last_query.filters.min_citations == 100
+
+
+def test_search_venue_wires_through(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, fake_paper: Paper
+) -> None:
+    agg = FilterCapturingAggregator([fake_paper])
+    monkeypatch.setattr(cli_module, "_build_aggregator", lambda *a, **kw: agg)
+    result = runner.invoke(cli_module.app, ["search", "x", "--venue", "NeurIPS"])
+    assert result.exit_code == 0
+    assert agg.last_query.filters.venue == "NeurIPS"
+
+
+def test_search_author_wires_through(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, fake_paper: Paper
+) -> None:
+    agg = FilterCapturingAggregator([fake_paper])
+    monkeypatch.setattr(cli_module, "_build_aggregator", lambda *a, **kw: agg)
+    result = runner.invoke(cli_module.app, ["search", "x", "--author", "Hinton"])
+    assert result.exit_code == 0
+    assert agg.last_query.filters.author == "Hinton"
+
+
+def test_search_bad_year_exits_nonzero(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(*_a, **_k):
+        raise AssertionError("aggregator should not be built for bad year")
+
+    monkeypatch.setattr(cli_module, "_build_aggregator", boom)
+    result = runner.invoke(cli_module.app, ["search", "x", "--year", "not-a-year"])
+    assert result.exit_code != 0
+    out = result.stdout + result.stderr
+    assert "year" in out.lower() or "invalid" in out.lower()
+
+
+def test_search_bad_year_inverted_range_exits_nonzero(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cli_module, "_build_aggregator", lambda *a, **kw: FakeAggregator([]))
+    result = runner.invoke(cli_module.app, ["search", "x", "--year", "2026-2023"])
+    assert result.exit_code != 0
+
+
+def test_search_no_filters_leaves_filters_none(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, fake_paper: Paper
+) -> None:
+    """When no filter flags are passed, filters should be None (not an empty struct)."""
+    agg = FilterCapturingAggregator([fake_paper])
+    monkeypatch.setattr(cli_module, "_build_aggregator", lambda *a, **kw: agg)
+    result = runner.invoke(cli_module.app, ["search", "x"])
+    assert result.exit_code == 0
+    assert agg.last_query.filters is None
+
+
 def test_configure_logging_default_silences_libraries(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

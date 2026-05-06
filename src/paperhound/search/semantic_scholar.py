@@ -171,10 +171,14 @@ class SemanticScholarProvider(SearchProvider):
             "limit": max(1, min(query.limit, 100)),
             "fields": S2_FIELDS,
         }
-        if query.year_min or query.year_max:
-            lo = query.year_min or ""
-            hi = query.year_max or ""
+        year_min = query.year_min or (query.filters.year_min if query.filters else None)
+        year_max = query.year_max or (query.filters.year_max if query.filters else None)
+        if year_min or year_max:
+            lo = year_min or ""
+            hi = year_max or ""
             params["year"] = f"{lo}-{hi}"
+        if query.filters and query.filters.min_citations is not None:
+            params["minCitationCount"] = query.filters.min_citations
         resp = self._request("search", f"{S2_BASE_URL}/paper/search", params)
         data = resp.json()
         return [_s2_to_paper(item) for item in data.get("data") or []]

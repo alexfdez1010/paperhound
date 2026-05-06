@@ -139,13 +139,18 @@ class CrossrefProvider(SearchProvider):
             "query": query.text,
             "rows": max(1, min(query.limit, 100)),
         }
-        filters: list[str] = []
-        if query.year_min:
-            filters.append(f"from-pub-date:{query.year_min}")
-        if query.year_max:
-            filters.append(f"until-pub-date:{query.year_max}")
-        if filters:
-            params["filter"] = ",".join(filters)
+        api_filters: list[str] = []
+        year_min = query.year_min or (query.filters.year_min if query.filters else None)
+        year_max = query.year_max or (query.filters.year_max if query.filters else None)
+        if year_min:
+            api_filters.append(f"from-pub-date:{year_min}")
+        if year_max:
+            api_filters.append(f"until-pub-date:{year_max}")
+        if api_filters:
+            params["filter"] = ",".join(api_filters)
+        # Author name — Crossref supports query.author for filtering.
+        if query.filters and query.filters.author:
+            params["query.author"] = query.filters.author
         resp = self._request("search", f"{CROSSREF_BASE_URL}/works", params)
         data = resp.json()
         items = (data.get("message") or {}).get("items") or []

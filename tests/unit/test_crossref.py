@@ -7,6 +7,7 @@ import pytest
 import respx
 
 from paperhound.errors import ProviderError
+from paperhound.models import SearchFilters
 from paperhound.search.base import SearchQuery
 from paperhound.search.crossref import CROSSREF_BASE_URL, CrossrefProvider
 
@@ -115,3 +116,28 @@ def test_user_agent_includes_mailto() -> None:
     with CrossrefProvider(mailto="me@example.com") as provider:
         provider.search(SearchQuery(text="x", limit=1))
     assert "mailto:me@example.com" in route.calls[0].request.headers["User-Agent"]
+
+
+@respx.mock
+def test_search_pushes_down_author_filter() -> None:
+    route = respx.get(f"{CROSSREF_BASE_URL}/works").mock(
+        return_value=httpx.Response(200, json={"message": {"items": []}})
+    )
+    filters = SearchFilters(author="Hinton")
+    with CrossrefProvider() as provider:
+        provider.search(SearchQuery(text="x", limit=2, filters=filters))
+    assert route.calls[0].request.url.params["query.author"] == "Hinton"
+
+
+@respx.mock
+def test_search_pushes_down_year_from_filters_when_query_root_empty() -> None:
+    """year_min/year_max from SearchFilters are pushed down even when not set on query root."""
+    route = respx.get(f"{CROSSREF_BASE_URL}/works").mock(
+        return_value=httpx.Response(200, json={"message": {"items": []}})
+    )
+    filters = SearchFilters(year_min=2021, year_max=2023)
+    with CrossrefProvider() as provider:
+        provider.search(SearchQuery(text="x", limit=2, filters=filters))
+    filter_param = route.calls[0].request.url.params["filter"]
+    assert "from-pub-date:2021" in filter_param
+    assert "until-pub-date:2023" in filter_param

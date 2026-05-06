@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
-from paperhound.models import Paper
+from paperhound.models import Paper, SearchFilters
 
 
 class Capability(str, Enum):
@@ -25,6 +25,7 @@ class SearchQuery:
     limit: int = 10
     year_min: int | None = None
     year_max: int | None = None
+    filters: SearchFilters | None = field(default=None)
 
 
 class SearchProvider(ABC):

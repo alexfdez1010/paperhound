@@ -151,10 +151,26 @@ class OpenAlexProvider(SearchProvider):
             "search": query.text,
             "per_page": max(1, min(query.limit, 50)),
         }
-        if query.year_min or query.year_max:
-            lo = query.year_min or 0
-            hi = query.year_max or 9999
-            params["filter"] = f"from_publication_date:{lo}-01-01,to_publication_date:{hi}-12-31"
+        filter_parts: list[str] = []
+        # Year range — always pushed down when present (from query root or filters).
+        year_min = query.year_min or (query.filters.year_min if query.filters else None)
+        year_max = query.year_max or (query.filters.year_max if query.filters else None)
+        if year_min or year_max:
+            lo = year_min or 0
+            hi = year_max or 9999
+            filter_parts.append(f"from_publication_date:{lo}-01-01,to_publication_date:{hi}-12-31")
+        # Citation count floor — OpenAlex supports cited_by_count filter.
+        if query.filters and query.filters.min_citations is not None:
+            filter_parts.append(f"cited_by_count:>{query.filters.min_citations - 1}")
+        if filter_parts:
+            params["filter"] = ",".join(filter_parts)
+        # Author name — use OpenAlex search param for authorships.
+        if query.filters and query.filters.author:
+            params["filter"] = (
+                params.get("filter", "")
+                + ("," if params.get("filter") else "")
+                + f"authorships.author.display_name.search:{query.filters.author}"
+            )
         resp = self._request("search", f"{OPENALEX_BASE_URL}/works", self._params(params))
         data = resp.json()
         return [_payload_to_paper(item) for item in data.get("results") or []]

@@ -16,8 +16,10 @@ from paperhound.citation_export import render as render_citation
 from paperhound.convert import convert_to_markdown
 from paperhound.download import download_pdf, resolve_pdf_url
 from paperhound.errors import LibraryError, PaperhoundError, RerankError
+from paperhound.filtering import parse_year_range
 from paperhound.identifiers import IdentifierKind, detect
 from paperhound.library import Library, _canonical_id, _library_dir, _safe_filename
+from paperhound.models import SearchFilters
 from paperhound.output import (
     paper_to_json_line,
     papers_to_json,
@@ -109,6 +111,8 @@ HELP_EPILOG = (
     "\n"
     "\b\n"
     '  paperhound search "retrieval augmented generation" -n 5\n'
+    '  paperhound search "diffusion models" --year 2022-2024 --min-citations 100\n'
+    '  paperhound search "transformers" --venue NeurIPS --author Vaswani\n'
     '  paperhound search "llm agents" --json | jq .title\n'
     "  paperhound show 2401.12345\n"
     "  paperhound show 2401.12345 --json\n"
@@ -132,6 +136,10 @@ HELP_EPILOG = (
     "             openalex + dblp + crossref + huggingface (parallel, 10s\n"
     "             budget; round-robin merge across providers; partial\n"
     "             results returned on timeout).\n"
+    "Filters:     --year RANGE (2023, 2023-2026, 2023-, -2026), --min-citations N,\n"
+    "             --venue STRING (case-insensitive substring), --author STRING.\n"
+    "             Pushed down to OpenAlex, Crossref, and Semantic Scholar;\n"
+    "             applied client-side for all providers after merge.\n"
     "Identifiers: arXiv id (2401.12345), DOI, Semantic Scholar id, or paper URL.\n"
     "Library:     ~/.paperhound/library/ (override: PAPERHOUND_LIBRARY_DIR).\n"
     "JSON output: search --json emits JSONL (one Paper object per line);\n"
@@ -230,7 +238,9 @@ _RERANK_CANDIDATE_CAP = 50
     epilog=(
         "Examples:\n\n\b\n"
         '  paperhound search "diffusion models" -n 20\n'
-        '  paperhound search "graph neural networks" -s arxiv --year-min 2023\n'
+        '  paperhound search "graph neural networks" -s arxiv --year 2023-\n'
+        '  paperhound search "llm agents" --year 2020-2024 --min-citations 50\n'
+        '  paperhound search "transformers" --venue NeurIPS --author Hinton\n'
         '  paperhound search "llm agents" --json | jq .\n'
         '  paperhound search "transformers" --rerank\n'
         '  paperhound search "vision language" --rerank'
@@ -254,10 +264,34 @@ def search(
         ),
     ),
     year_min: int | None = typer.Option(
-        None, "--year-min", help="Earliest publication year (inclusive)."
+        None, "--year-min", help="Earliest publication year (inclusive). Prefer --year."
     ),
     year_max: int | None = typer.Option(
-        None, "--year-max", help="Latest publication year (inclusive)."
+        None, "--year-max", help="Latest publication year (inclusive). Prefer --year."
+    ),
+    year: str | None = typer.Option(
+        None,
+        "--year",
+        help=(
+            "Year range filter. Accepts: YYYY (single year), YYYY-YYYY (range),"
+            " YYYY- (from year), -YYYY (up to year). Inclusive on both ends."
+        ),
+    ),
+    min_citations: int | None = typer.Option(
+        None,
+        "--min-citations",
+        min=0,
+        help="Minimum citation count (inclusive). Papers with unknown citation counts are excluded.",
+    ),
+    venue: str | None = typer.Option(
+        None,
+        "--venue",
+        help="Case-insensitive substring match against the paper's venue / journal / conference.",
+    ),
+    author: str | None = typer.Option(
+        None,
+        "--author",
+        help="Case-insensitive substring match against any author name.",
     ),
     timeout: float = typer.Option(
         DEFAULT_TIMEOUT,
@@ -286,6 +320,28 @@ def search(
     if not query.strip():
         raise typer.BadParameter("Query must not be empty.")
 
+    # Parse --year into year_min/year_max (overrides individual flags when both given).
+    if year is not None:
+        try:
+            parsed_min, parsed_max = parse_year_range(year)
+        except PaperhoundError as exc:
+            raise typer.BadParameter(str(exc), param_hint="'--year'") from exc
+        # --year takes precedence; merge only when the individual flags weren't set.
+        if year_min is None:
+            year_min = parsed_min
+        if year_max is None:
+            year_max = parsed_max
+
+    filters = SearchFilters(
+        year_min=year_min,
+        year_max=year_max,
+        min_citations=min_citations,
+        venue=venue,
+        author=author,
+    )
+    if filters.is_empty():
+        filters = None  # type: ignore[assignment]
+
     # When reranking, fetch a wider candidate pool so the reranker has more
     # material to work with, then slice down to the requested limit afterward.
     if do_rerank:
@@ -301,6 +357,7 @@ def search(
                 limit=candidate_limit,
                 year_min=year_min,
                 year_max=year_max,
+                filters=filters,
             )
         )
     except PaperhoundError as exc:

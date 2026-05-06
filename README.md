@@ -94,7 +94,7 @@ dblp_key,core_id}`, `sources[]`.
 
 | Command | Description |
 |---|---|
-| `paperhound search <query>` | Run a unified search. `--limit`, `--source arxiv\|openalex\|dblp\|crossref\|huggingface\|semantic_scholar\|core` (repeatable), `--year-min`, `--year-max`, `--timeout`, `--json` (JSONL output), `--rerank` (embedding rerank; see below), `--rerank-model`. |
+| `paperhound search <query>` | Run a unified search. `--limit`, `--source arxiv\|openalex\|dblp\|crossref\|huggingface\|semantic_scholar\|core` (repeatable), `--year RANGE`, `--min-citations N`, `--venue STRING`, `--author STRING`, `--timeout`, `--json` (JSONL output), `--rerank` (embedding rerank; see below), `--rerank-model`. |
 | `paperhound show <id>` | Fetch a paper's metadata + abstract. `--format markdown\|bibtex\|ris\|csljson` (default `markdown`), `--json` (compact JSON; mutually exclusive with `--format`). |
 | `paperhound download <id> -o <path>` | Download a paper PDF. |
 | `paperhound convert <pdf> -o <md>` | Convert a PDF (or any docling-supported file/URL) to Markdown. |
@@ -109,6 +109,43 @@ dblp_key,core_id}`, `sources[]`.
 | `paperhound version` | Print the installed version. |
 
 Run `paperhound <command> --help` for full options.
+
+## Filters
+
+`paperhound search` accepts four filter flags. Filters are pushed down to
+providers that support them (OpenAlex, Crossref, Semantic Scholar) and always
+applied client-side after the merge as a safety net.
+
+| Flag | Accepted values | Example |
+|---|---|---|
+| `--year RANGE` | `YYYY`, `YYYY-YYYY`, `YYYY-`, `-YYYY` | `--year 2022-2024` |
+| `--min-citations N` | integer ≥ 0 | `--min-citations 100` |
+| `--venue STRING` | case-insensitive substring | `--venue NeurIPS` |
+| `--author STRING` | case-insensitive substring | `--author Hinton` |
+
+`--year` is the preferred way to filter by year. It accepts a single year
+(`2023`), an inclusive range (`2023-2026`), open-ended from (`2023-`), or
+open-ended up-to (`-2026`). The older `--year-min` / `--year-max` flags are
+still accepted.
+
+```bash
+# Papers from 2022 to 2024 with at least 100 citations
+paperhound search "vision transformers" --year 2022-2024 --min-citations 100
+
+# NeurIPS papers by Hinton
+paperhound search "deep learning" --venue NeurIPS --author Hinton
+
+# arXiv-only papers from 2023 onwards
+paperhound search "diffusion models" -s arxiv --year 2023-
+
+# Combine filters and JSON output
+paperhound search "llm alignment" --year 2023 --min-citations 50 --json | jq .title
+```
+
+**Behavior with missing fields**: papers whose `year` or `venue` field is
+unknown (`null`) are kept — the filter cannot be verified. Papers whose
+`citation_count` is unknown are excluded when `--min-citations` is set
+(conservative: the user asked for a floor).
 
 ## Export formats
 

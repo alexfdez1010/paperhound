@@ -92,7 +92,7 @@ Typical agent workflow to build a local corpus:
 ### Search — unified across providers
 
 ```bash
-paperhound search "<query>" [--limit N] [--year-min YYYY] [--year-max YYYY] [--source arxiv|openalex|dblp|crossref|huggingface|semantic_scholar|core] [--timeout SECONDS] [--json] [--rerank] [--rerank-model NAME]
+paperhound search "<query>" [--limit N] [--year RANGE] [--min-citations N] [--venue STRING] [--author STRING] [--source arxiv|openalex|dblp|crossref|huggingface|semantic_scholar|core] [--timeout SECONDS] [--json] [--rerank] [--rerank-model NAME]
 ```
 
 - Default `--limit` is 10. Cap it (e.g. `-n 5`) when the user asks for "a few".
@@ -101,6 +101,12 @@ paperhound search "<query>" [--limit N] [--year-min YYYY] [--year-max YYYY] [--s
   `-s core` to opt into Semantic Scholar or CORE.
 - `--timeout` defaults to 10s. Providers that exceed the budget are dropped
   from the response — the command still succeeds with whatever returned.
+- **Filters** — pushed down to OpenAlex / Crossref / Semantic Scholar where
+  supported, always applied client-side after the merge:
+  - `--year RANGE` — accepts `2023`, `2023-2026`, `2023-`, `-2026` (inclusive).
+  - `--min-citations N` — papers with unknown citation count are excluded.
+  - `--venue STRING` — case-insensitive substring match against the venue field.
+  - `--author STRING` — case-insensitive substring match against any author name.
 - `--json` emits **JSONL** (one compact JSON object per line, no indent).
   Parse each line individually with `json.loads(line)` or pipe to `jq '.title'`.
 - JSON schema (`paperhound.models.Paper`): `title`, `authors[]`, `abstract`,

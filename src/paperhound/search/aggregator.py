@@ -7,6 +7,7 @@ import re
 from collections.abc import Iterable
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 
+from paperhound.filtering import apply_filters
 from paperhound.models import Paper
 from paperhound.search.base import Capability, SearchProvider, SearchQuery
 
@@ -98,7 +99,12 @@ class SearchAggregator:
             per_provider = self._collect_per_provider(future_for)
         finally:
             pool.shutdown(wait=False, cancel_futures=True)
-        return self._round_robin_merge(per_provider, query.limit)
+        merged = self._round_robin_merge(per_provider, query.limit)
+        # Always run a client-side pass as a safety net (providers may not
+        # implement push-down for all filter fields, or may ignore them silently).
+        if query.filters and not query.filters.is_empty():
+            merged = apply_filters(merged, query.filters)
+        return merged
 
     def _collect_per_provider(
         self,
