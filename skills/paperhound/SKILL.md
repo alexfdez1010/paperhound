@@ -1,255 +1,121 @@
 ---
 name: paperhound
-description: Search, inspect, download, and convert academic papers (arXiv, OpenAlex, DBLP, Crossref, Hugging Face Papers, Semantic Scholar, CORE) to Markdown via the `paperhound` CLI. Use whenever the user asks to find papers, fetch a paper's abstract, download a PDF, or turn a paper into Markdown.
+description: Use for ANY task involving academic / scientific / research papers via the `paperhound` CLI — search (arXiv, OpenAlex, DBLP, Crossref, HF Papers, Semantic Scholar, CORE), read abstracts, download PDFs, convert to Markdown, explore citations (refs / cited-by), export BibTeX/RIS/CSL-JSON, and manage a local library. Trigger on arXiv ids, DOIs, paper URLs, or phrases like "find papers", "summarize this paper", "literature review", "what cites X", "BibTeX for X". Prefer over `curl`, `requests`, or raw `arxiv` for paper tasks.
 ---
 
 # paperhound — paper search and conversion CLI
 
-`paperhound` is a small command-line tool that queries arXiv, OpenAlex, DBLP,
-Crossref and Hugging Face Papers (and optionally Semantic Scholar / CORE) in
-parallel under a 10-second budget, resolves identifiers (arXiv id, DOI,
-Semantic Scholar paper id, OpenAlex Work id, or any paper URL), downloads the
-PDF, and converts it to Markdown using
+`paperhound` is a small CLI that queries up to seven academic providers in
+parallel under a 10-second budget, resolves identifiers (arXiv id, DOI, S2 id,
+OpenAlex id, paper URL), downloads PDFs, and converts them to Markdown via
 [docling](https://github.com/docling-project/docling). Results are merged
-round-robin across providers (so the top-N has source diversity, not just the
-fastest provider), then deduplicated. Slow providers are dropped silently —
-you always get whatever finished within the budget.
+round-robin (top-N has source diversity, not just the fastest provider) and
+deduplicated. It also keeps a local SQLite library so you can build an
+offline corpus across sessions.
+
+This skill is **the** way to fetch papers. Don't shell out to `curl`,
+`requests`, `arxiv.py`, etc. — `paperhound` already handles redirects,
+streaming, PDF URL resolution, and metadata-poisoning detection.
 
 ## Setup check
 
-Before using, confirm it is installed:
-
 ```bash
-paperhound version
-```
-
-If the command is missing, install it:
-
-```bash
+paperhound version            # confirm install
 pip install paperhound        # or: uv tool install paperhound
 ```
 
-## Installing this skill
+Optional extras: `pip install 'paperhound[rerank]'` enables embedding
+rerank on `search` (on by default when installed).
 
-Use the [skills.sh](https://skills.sh) CLI:
-
-```bash
-npx skills add alexfdez1010/paperhound
-```
-
-It picks up this `SKILL.md` (frontmatter `name` + `description`) and installs
-it under `~/.claude/skills/paperhound/`. Add `-a claude-code` to target a
-specific agent, or `-y` to skip prompts.
-
-## When to use this skill
+## When to trigger
 
 Trigger this skill when the user asks for any of:
 
-- "Find/search papers about X"
-- "What's the abstract of paper X / arXiv 2401.12345?"
-- "Download this paper" (with an id, DOI, or URL)
-- "Convert this PDF to markdown"
-- "Get me a markdown version of paper X so I can quote it"
-- "Add paper X to my library"
-- "Search my library for Y"
-- "List papers I've saved"
-- "What papers does this paper cite?" / "Show me the references for X"
-- "What papers cite this paper?" / "Who cited X?"
+- **Search**: "find/search papers about X", "papers from 2024 on X"
+- **Read**: "abstract of arXiv 2401.12345", "what is paper X about"
+- **Fetch**: "download this paper", "convert this PDF to Markdown"
+- **Ingest**: "give me a Markdown version so I can read/quote it"
+- **Library**: "save paper X", "search my library for Y", "list saved papers"
+- **Graph**: "what does X cite", "who cites X", "related work for X"
+- **Cite**: "BibTeX for X", "RIS / CSL-JSON for X"
 
-## Commands
+## Core principle for agents
 
-Always pass `--json` when you plan to consume the output programmatically.
+**Always pass `--json` when the output will be parsed by code or another LLM
+turn.** The default Markdown rendering uses `rich` styling that is hard to
+parse and context-heavy. JSON output is stable, compact, and deterministic.
 
-### Local library — add / list / grep / rm
+| Command | `--json` shape |
+|---|---|
+| `search`, `refs`, `cited-by` | **JSONL** — one `Paper` per line |
+| `show` | **single JSON object** (one `Paper`) |
+| `add`, `list`, `grep`, `rm`, `download`, `convert`, `get` | no `--json`; use `show --json` for metadata, or read the produced file |
 
-paperhound keeps a persistent per-user library at `~/.paperhound/library/`
-(SQLite FTS5, no extra dependencies). Override the directory with the
-`PAPERHOUND_LIBRARY_DIR` environment variable.
+## Decision tree
 
-```bash
-# Add a paper's metadata to the library (idempotent re-add updates the row)
-paperhound add <identifier>
+```
+User wants…                            → Run
 
-# Add and also convert the PDF to Markdown, stored in the library directory
-paperhound add <identifier> --convert
-
-# List all saved papers
-paperhound list
-
-# Full-text search over title + abstract + Markdown body (offline)
-paperhound grep "<query>" [--limit N]
-
-# Remove a paper from the library (and deletes its Markdown file, if any)
-paperhound rm <identifier> [--yes]
+a list of candidates on a topic        → search "<query>" --json -n 5
+metadata/abstract for a known id       → show <id> --json
+the PDF on disk                        → download <id> -o ./papers/
+the full text in Markdown              → get <id> -o paper.md
+to save it across sessions             → add <id> --convert
+to find prior work / related work      → refs <id> --json -n 10
+to find follow-up work                 → cited-by <id> --json -n 10
+a citation entry                       → show <id> --format bibtex|ris|csljson
+to query the local corpus offline      → grep "<query>"
 ```
 
-Typical agent workflow to build a local corpus:
-
-1. `paperhound search "…" --json -n 10` — find candidates.
-2. `paperhound add <id> --convert` — persist metadata + Markdown.
-3. `paperhound grep "…"` — query the corpus offline for future sessions.
-
-### Search — unified across providers
+## Quick recipes (copy-paste-ready)
 
 ```bash
-paperhound search "<query>" [--limit N] [--year RANGE] [--min-citations N] [--venue STRING] [--author STRING] [--source arxiv|openalex|dblp|crossref|huggingface|semantic_scholar|core] [--timeout SECONDS] [--json] [--rerank/--no-rerank] [--rerank-model NAME]
-```
+# 1. Find candidates and capture the top arXiv id with jq
+paperhound search "speculative decoding" --json -n 5 \
+  | jq -r 'select(.identifiers.arxiv_id) | .identifiers.arxiv_id' | head -1
 
-- Default `--limit` is 10. Cap it (e.g. `-n 5`) when the user asks for "a few".
-- `--source` is repeatable; omit it to query the default set
-  (arxiv + openalex + dblp + crossref + huggingface). Pass `-s s2` /
-  `-s core` to opt into Semantic Scholar or CORE.
-- `--timeout` defaults to 10s. Providers that exceed the budget are dropped
-  from the response — the command still succeeds with whatever returned.
-- **Filters** — pushed down to OpenAlex / Crossref / Semantic Scholar where
-  supported, always applied client-side after the merge:
-  - `--year RANGE` — accepts `2023`, `2023-2026`, `2023-`, `-2026` (inclusive).
-  - `--min-citations N` — papers with unknown citation count are excluded.
-  - `--venue STRING` — case-insensitive substring match against the venue field.
-  - `--author STRING` — case-insensitive substring match against any author name.
-- `--json` emits **JSONL** (one compact JSON object per line, no indent).
-  Parse each line individually with `json.loads(line)` or pipe to `jq '.title'`.
-- JSON schema (`paperhound.models.Paper`): `title`, `authors[]`, `abstract`,
-  `year`, `venue`, `url`, `pdf_url`, `citation_count`,
-  `identifiers.{arxiv_id,doi,semantic_scholar_id,openalex_id,dblp_key,core_id}`,
-  `sources[]`.
-- Embedding rerank is **on by default** when `paperhound[rerank]` is installed
-  (`pip install 'paperhound[rerank]'`). Pass `--no-rerank` to skip it for one
-  call. Default model: `sentence-transformers/all-MiniLM-L6-v2`. Override with
-  `--rerank-model NAME`. Without the extra installed the CLI silently falls
-  back to merge-order — never errors.
+# 2. Read an abstract for an LLM turn
+paperhound show 2401.12345 --json | jq '{title, year, abstract}'
 
-### Show — abstract + metadata for a single paper
+# 3. Pull the full paper into the model's context as a file path
+paperhound get 1706.03762 -o /tmp/attention.md
+# → then Read /tmp/attention.md
 
-```bash
-paperhound show <identifier> [-s arxiv|openalex|dblp|crossref|hf|s2|core ...] [--json] [--format markdown|bibtex|ris|csljson]
-```
-
-- `<identifier>` accepts: arXiv id (`2401.12345`, `cs.AI/0301001`),
-  DOI (`10.1234/foo.bar`), Semantic Scholar id (40-char hex), or any paper URL.
-- `--source` / `-s` restricts the lookup to one or more providers (repeatable).
-  Use it when an upstream aggregator returns poisoned metadata for an id —
-  e.g. `paperhound show 2001.08361 -s arxiv` forces the canonical arXiv record.
-  By default paperhound auto-detects poisoning by cross-checking titles
-  between providers and drops mismatched records, but explicit `-s arxiv`
-  is the surest workaround.
-- `--json` emits a **single compact JSON object** (one line, `paperhound.models.Paper`
-  schema). Mutually exclusive with `--format` — use one or the other.
-- `--format` controls the output format (default `markdown`):
-  - `markdown` — rich terminal view (title, authors, abstract, identifiers).
-  - `bibtex` — `@article`/`@inproceedings`/`@misc` entry; cite key is
-    `<lastNameLower><year><firstSignificantWord>`; LaTeX special chars escaped.
-  - `ris` — RIS block (`TY`, `AU`, `TI`, `AB`, `PY`, `DO`, `UR`, `ER`);
-    compatible with Zotero, Mendeley, EndNoteX.
-  - `csljson` — single-element CSL-JSON array; compatible with Pandoc and
-    citation processors.
-
-### Download — fetch the PDF
-
-```bash
-paperhound download <identifier> -o <path-or-dir>
-```
-
-- For arXiv ids the PDF URL is constructed directly.
-- For DOIs / S2 ids paperhound looks up the open-access PDF via Semantic
-  Scholar; if no open-access version exists the command exits non-zero.
-- `-o` semantics: a path with a suffix (`paper.pdf`) is treated as a file; a
-  path without one (`./papers`, `./papers/`) is treated as a directory and
-  the file is named after the identifier. Missing directories are created.
-
-### Convert — PDF → Markdown via docling
-
-```bash
-paperhound convert <path-or-url> [-o output.md] [--with-figures] [--equations inline|latex] [--tables markdown|html]
-```
-
-- Without `-o`, the Markdown is written to stdout.
-- `--with-figures` — extract embedded figures to `<stem>_assets/` and add `![](...)` references. Requires `-o`.
-- `--equations latex` — enable formula enrichment; math is preserved as `$...$` / `$$...$$` LaTeX.
-- `--tables html` — embed raw `<table>` blocks for better fidelity with merged/irregular cells.
-- All three flags default to the original behaviour (no figures, inline equations, GFM tables).
-
-### Get — download and convert in one step
-
-```bash
-paperhound get <identifier> [-o output.md] [--keep-pdf]
-```
-
-- Default Markdown filename is `<id>.md` in the current directory.
-- The intermediate PDF is deleted unless `--keep-pdf` is passed.
-
-### Citation graph — refs and cited-by
-
-```bash
-# Works the paper cites (its reference list)
-paperhound refs <identifier> [--depth 1|2] [--limit N] [--source openalex|semantic_scholar] [--json]
-
-# Works that cite the paper
-paperhound cited-by <identifier> [--depth 1|2] [--limit N] [--source openalex|semantic_scholar] [--json]
-```
-
-- Default provider order: OpenAlex → Semantic Scholar (automatic fallback).
-- `--depth 2` fetches references/citations of references/citations (BFS, capped
-  at `limit * 2` total, 0.1 s polite pause between hops, deduped by id/DOI/title).
-- Output is the same `Paper` format as `search` — use `--json` for scripting.
-
-Typical agent workflow for related-work exploration:
-
-1. `paperhound refs 1706.03762 --json -n 10` — get the top references.
-2. Pick an interesting reference, run `paperhound show <id>` to confirm relevance.
-3. `paperhound cited-by 1706.03762 --json -n 10` — find who built on this work.
-
-## Recommended workflow for agents
-
-1. Run `paperhound search "<query>" --json -n 5` to find candidates.
-2. Read the JSON, pick the most relevant paper, capture
-   `identifiers.arxiv_id` (preferred) or `identifiers.doi`.
-3. If the user wants the abstract: `paperhound show <id> --json` and surface
-   `title`, `authors`, `year`, `abstract`, `url`.
-4. If the user wants the full text: `paperhound get <id> -o paper.md` and read
-   the resulting file.
-
-### Corpus-building workflow
-
-```bash
-# 1. Save a paper for offline access
+# 4. Save to library and grep offline next session
 paperhound add 1706.03762 --convert
-
-# 2. In future sessions, search offline without API calls
 paperhound grep "multi-head attention"
-
-# 3. Browse the corpus
-paperhound list
 ```
 
-## Examples
+## Reference files (read on demand)
 
-```bash
-# 1. Search and grab the most relevant arXiv id
-paperhound search "diffusion transformers" -n 5 --json
+The full surface lives in `reference/*.md`. Load only the file you need
+for the task at hand:
 
-# 2. Show the abstract
-paperhound show 2401.12345 --json
+- **`reference/commands.md`** — every command, every flag, every option.
+  Read this when you need a flag you don't remember (filters, formats,
+  rerank, sources, depth, timeouts).
+- **`reference/json-schema.md`** — the `Paper` JSON schema, JSONL vs
+  single-object rules, and `jq` recipes. Read this when parsing output
+  programmatically.
+- **`reference/workflows.md`** — multi-step recipes for common agent
+  tasks: literature review, corpus building, citation-graph exploration,
+  paper-summarization pipelines, BibTeX export. Read this when the user
+  asks for a goal larger than one command.
+- **`reference/troubleshooting.md`** — failure modes (no open-access PDF,
+  unrecognized identifier, metadata poisoning, slow first docling run,
+  rate limits) and how to recover. Read this when a command fails or
+  returns surprising data.
 
-# 3. Just download the PDF
-paperhound download 1706.03762 -o ./papers/
+## Hard rules
 
-# 4. Get markdown for an LLM-friendly version of a paper
-paperhound get 1706.03762 -o attention.md
-```
-
-## Failure modes you should expect
-
-- **No open-access PDF**: `download`/`get` exit 1 with `error: No open-access PDF found …`. Try Semantic Scholar (`paperhound show <id> --json`) and inspect `pdf_url`; if null, tell the user.
-- **Unrecognized identifier**: `error: Unrecognized paper identifier: …`. Re-run `paperhound search` to find a canonical id.
-- **Network/provider error**: aggregator silently drops failing providers, so search still returns results from whichever provider responded; warn the user only if the merged list is empty.
-- **docling first run is slow**: it downloads model weights on first conversion. Don't retry; just wait.
-
-## Don'ts
-
-- Don't shell out to `curl`/`requests` to fetch papers — `paperhound download` already handles redirects, streaming, and PDF URL resolution.
-- Don't paste the full Markdown of a long paper into chat; write it to a file
-  with `paperhound get -o …` and reference the path.
-- Don't pass user-controlled strings as `--source` values without restricting
-  them to the known set: `arxiv`, `openalex`, `dblp`, `crossref`,
-  `huggingface` (alias `hf`), `semantic_scholar` (alias `s2`), `core`.
+- **Don't** shell out to `curl`/`requests`/raw `arxiv` to fetch papers —
+  `paperhound download`/`get` already does this correctly.
+- **Don't** paste the full Markdown of a long paper into chat — write it to
+  a file with `paperhound get -o …` and reference the path.
+- **Don't** pass user-controlled strings as `--source` without restricting
+  them to: `arxiv`, `openalex`, `dblp`, `crossref`, `huggingface` (alias
+  `hf`), `semantic_scholar` (alias `s2`), `core`.
+- **Don't** retry on the first slow `convert` — docling is downloading model
+  weights (~hundreds of MB). Wait, don't loop.
+- **Don't** invent flags. If a flag isn't in `reference/commands.md`, it
+  doesn't exist — verify with `paperhound <cmd> --help` if unsure.
