@@ -116,6 +116,7 @@ paperhound get 1706.03762 -o attention.md
 | `paperhound list` | List papers in the local library. |
 | `paperhound grep <query>` | Full-text search the local library. |
 | `paperhound rm <id>` | Remove a paper from the local library. |
+| `paperhound providers` | List every search provider with its description, default-set membership, runtime availability, env-var status, and one-line setup hint. `--json` for machine-readable output. |
 | `paperhound version` | Print the installed version. |
 
 Run `paperhound <command> --help` for full options.
@@ -243,6 +244,10 @@ paperhound accepts whatever you have on hand:
 | `CORE_API_KEY` | Required to enable the CORE provider. Get a free key at <https://core.ac.uk/services/api>. |
 | `SEMANTIC_SCHOLAR_API_KEY` | Optional. The anonymous quota is shared globally and 429s are common; set this for steadier throughput. |
 | `PAPERHOUND_LIBRARY_DIR` | Override the library directory (default `~/.paperhound/library/`). |
+
+Run `paperhound providers` (or `paperhound providers --json`) to see, at a
+glance, which providers are configured on the current machine and what
+to export to enable or upgrade each one.
 
 ## 📚 More
 

@@ -31,6 +31,11 @@ class ArxivProvider(SearchProvider):
     """Wraps :mod:`arxiv` to expose a ``SearchProvider`` interface."""
 
     name = "arxiv"
+    description = (
+        "arXiv preprint server (CS, math, physics, quant-bio, ...). Authoritative"
+        " source for arXiv ids and the canonical PDF mirror."
+    )
+    homepage = "https://arxiv.org/"
 
     def __init__(self, client: arxiv.Client | None = None) -> None:
         self._client = client or arxiv.Client(page_size=50, delay_seconds=3, num_retries=3)

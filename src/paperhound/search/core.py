@@ -11,7 +11,12 @@ import httpx
 from paperhound.errors import ProviderError
 from paperhound.identifiers import IdentifierKind, detect
 from paperhound.models import Author, Paper, PaperIdentifier
-from paperhound.search.base import Capability, SearchProvider, SearchQuery
+from paperhound.search.base import (
+    Capability,
+    ProviderEnvVar,
+    SearchProvider,
+    SearchQuery,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +69,19 @@ class CoreProvider(SearchProvider):
     """
 
     name = "core"
+    description = (
+        "CORE — open-access aggregator with full-text PDF links across thousands"
+        " of repositories. Requires a free API key."
+    )
+    homepage = "https://core.ac.uk/"
+    env_vars = (
+        ProviderEnvVar(
+            name="CORE_API_KEY",
+            required=True,
+            purpose="Bearer token for the CORE v3 API.",
+            signup_url="https://core.ac.uk/services/api",
+        ),
+    )
     capabilities = frozenset(
         {Capability.TEXT_SEARCH, Capability.ID_LOOKUP, Capability.OPEN_ACCESS_PDF}
     )

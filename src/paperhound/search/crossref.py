@@ -12,7 +12,12 @@ import httpx
 from paperhound.errors import ProviderError
 from paperhound.identifiers import IdentifierKind, detect
 from paperhound.models import Author, Paper, PaperIdentifier
-from paperhound.search.base import Capability, SearchProvider, SearchQuery
+from paperhound.search.base import (
+    Capability,
+    ProviderEnvVar,
+    SearchProvider,
+    SearchQuery,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +96,19 @@ class CrossrefProvider(SearchProvider):
     """Calls api.crossref.org. Reads ``CROSSREF_MAILTO`` for the polite pool."""
 
     name = "crossref"
+    description = (
+        "Crossref — DOI registration agency, authoritative metadata for journal"
+        " articles, conference proceedings, and books across all disciplines."
+    )
+    homepage = "https://www.crossref.org/"
+    env_vars = (
+        ProviderEnvVar(
+            name="CROSSREF_MAILTO",
+            required=False,
+            purpose="Email for Crossref's polite pool — faster, more reliable responses.",
+            signup_url="https://api.crossref.org/swagger-ui/index.html#/Etiquette",
+        ),
+    )
     capabilities = frozenset({Capability.TEXT_SEARCH, Capability.ID_LOOKUP})
 
     def __init__(

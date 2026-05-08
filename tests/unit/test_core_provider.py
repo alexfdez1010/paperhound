@@ -56,7 +56,8 @@ def test_search_year_filter_appended_to_query() -> None:
     assert "yearPublished<=2024" in body
 
 
-def test_provider_unavailable_without_key() -> None:
+def test_provider_unavailable_without_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("CORE_API_KEY", raising=False)
     provider = CoreProvider(api_key=None)
     assert provider.available() is False
 

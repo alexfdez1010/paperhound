@@ -12,7 +12,7 @@ import httpx
 from paperhound.errors import ProviderError
 from paperhound.identifiers import IdentifierKind, detect, to_semantic_scholar_lookup
 from paperhound.models import Author, Paper, PaperIdentifier
-from paperhound.search.base import SearchProvider, SearchQuery
+from paperhound.search.base import ProviderEnvVar, SearchProvider, SearchQuery
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +75,19 @@ class SemanticScholarProvider(SearchProvider):
     """
 
     name = "semantic_scholar"
+    description = (
+        "Semantic Scholar Graph API — citation graph, abstracts, embeddings."
+        " Public endpoint is heavily rate-limited (429 / 403) without a key."
+    )
+    homepage = "https://www.semanticscholar.org/"
+    env_vars = (
+        ProviderEnvVar(
+            name="SEMANTIC_SCHOLAR_API_KEY",
+            required=False,
+            purpose="Raises rate limit; without it the public endpoint commonly returns 429.",
+            signup_url="https://www.semanticscholar.org/product/api#api-key-form",
+        ),
+    )
 
     def __init__(
         self,

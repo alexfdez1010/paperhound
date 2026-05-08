@@ -17,6 +17,21 @@ class Capability(str, Enum):
     OPEN_ACCESS_PDF = "open_access_pdf"
 
 
+@dataclass(frozen=True)
+class ProviderEnvVar:
+    """Documented env var consumed by a provider.
+
+    Used by ``paperhound providers`` to render setup hints. ``required=True``
+    means the provider is unusable without it; ``required=False`` means it is
+    optional but improves rate limits or unlocks the polite pool.
+    """
+
+    name: str
+    required: bool
+    purpose: str
+    signup_url: str | None = None
+
+
 @dataclass
 class SearchQuery:
     """A normalized search request shared across providers."""
@@ -32,6 +47,9 @@ class SearchProvider(ABC):
     """Abstract source of paper records (arXiv, OpenAlex, DBLP, ...)."""
 
     name: str = "base"
+    description: str = ""
+    homepage: str = ""
+    env_vars: tuple[ProviderEnvVar, ...] = ()
     capabilities: frozenset[Capability] = frozenset({Capability.TEXT_SEARCH, Capability.ID_LOOKUP})
     timeout: float = 30.0
 

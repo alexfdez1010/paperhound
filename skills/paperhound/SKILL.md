@@ -21,8 +21,14 @@ streaming, PDF URL resolution, and metadata-poisoning detection.
 
 ```bash
 paperhound version            # confirm install
+paperhound providers          # see which providers are usable + how to fix
 pip install paperhound        # or: uv tool install paperhound
 ```
+
+`paperhound providers` reports each backend's description, default-set
+membership, runtime availability, env-var status, and a one-line setup
+hint (e.g. `export CORE_API_KEY=…`). Use it whenever a search returns
+fewer / weaker results than expected. `--json` for machine-readable output.
 
 Optional extras: `pip install 'paperhound[rerank]'` enables embedding
 rerank on `search` (on by default when installed).

@@ -193,6 +193,24 @@ paperhound -V                 # equivalent
 
 ---
 
+## `providers` — list backends with status + setup hints
+
+```bash
+paperhound providers          # Rich table
+paperhound providers --json   # JSON array of provider status objects
+```
+
+Per provider you get: `name`, `description`, `homepage`, `capabilities`,
+`default_enabled`, `available`, `env_vars` (each with
+`name`/`required`/`purpose`/`signup_url`/`is_set`), and a one-line
+`fix` hint when something needs configuring.
+
+Use it to debug "why are my searches sparse?" — typical fixes are
+`export CORE_API_KEY=…` (enables CORE) or
+`export SEMANTIC_SCHOLAR_API_KEY=…` (raises S2 rate limit).
+
+---
+
 ## Source aliases
 
 Always restrict user-controlled `--source` values to this set:

@@ -1290,3 +1290,50 @@ class TestSearchRerank:
         # Table has 3 data rows: check that at most 3 paper titles appear
         # (Paper 0, Paper 1, Paper 2)
         assert "Paper 5" not in result.stdout
+
+
+def test_providers_table(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
+    for var in ("OPENALEX_MAILTO", "CROSSREF_MAILTO", "SEMANTIC_SCHOLAR_API_KEY", "CORE_API_KEY"):
+        monkeypatch.delenv(var, raising=False)
+    result = runner.invoke(cli_module.app, ["providers"])
+    assert result.exit_code == 0, result.output
+    out = result.stdout
+    for name in (
+        "arxiv",
+        "openalex",
+        "dblp",
+        "crossref",
+        "huggingface",
+        "semantic_scholar",
+        "core",
+    ):
+        assert name in out
+    # CORE without a key surfaces the env var hint.
+    assert "CORE_API_KEY" in out
+    # arxiv is in the default list and reports available.
+    assert "available" in out
+    assert "unavailable" in out  # CORE without a key
+
+
+def test_providers_json(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
+    for var in ("OPENALEX_MAILTO", "CROSSREF_MAILTO", "SEMANTIC_SCHOLAR_API_KEY", "CORE_API_KEY"):
+        monkeypatch.delenv(var, raising=False)
+    result = runner.invoke(cli_module.app, ["providers", "--json"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    by_name = {row["name"]: row for row in payload}
+    assert set(by_name) == {
+        "arxiv",
+        "openalex",
+        "dblp",
+        "crossref",
+        "huggingface",
+        "semantic_scholar",
+        "core",
+    }
+    assert by_name["arxiv"]["default_enabled"] is True
+    assert by_name["arxiv"]["available"] is True
+    assert by_name["core"]["available"] is False
+    assert by_name["core"]["env_vars"][0]["name"] == "CORE_API_KEY"
+    assert by_name["core"]["env_vars"][0]["required"] is True
+    assert by_name["core"]["fix"] is not None

@@ -11,7 +11,12 @@ import httpx
 from paperhound.errors import ProviderError
 from paperhound.identifiers import IdentifierKind, detect
 from paperhound.models import Author, Paper, PaperIdentifier
-from paperhound.search.base import Capability, SearchProvider, SearchQuery
+from paperhound.search.base import (
+    Capability,
+    ProviderEnvVar,
+    SearchProvider,
+    SearchQuery,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +104,19 @@ class OpenAlexProvider(SearchProvider):
     """
 
     name = "openalex"
+    description = (
+        "OpenAlex — free, ~250M works across all disciplines, with citation graph,"
+        " open-access PDF links, and venue / author metadata."
+    )
+    homepage = "https://openalex.org/"
+    env_vars = (
+        ProviderEnvVar(
+            name="OPENALEX_MAILTO",
+            required=False,
+            purpose="Email for the polite pool — better rate limits and priority queue.",
+            signup_url="https://docs.openalex.org/how-to-use-the-api/rate-limits-and-authentication",
+        ),
+    )
     capabilities = frozenset(
         {Capability.TEXT_SEARCH, Capability.ID_LOOKUP, Capability.OPEN_ACCESS_PDF}
     )

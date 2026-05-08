@@ -2,11 +2,17 @@
 
 from paperhound.search.aggregator import DEFAULT_TIMEOUT, SearchAggregator
 from paperhound.search.arxiv_provider import ArxivProvider
-from paperhound.search.base import Capability, SearchProvider, SearchQuery
+from paperhound.search.base import (
+    Capability,
+    ProviderEnvVar,
+    SearchProvider,
+    SearchQuery,
+)
 from paperhound.search.core import CoreProvider
 from paperhound.search.crossref import CrossrefProvider
 from paperhound.search.dblp import DBLPProvider
 from paperhound.search.huggingface import HuggingFaceProvider
+from paperhound.search.info import EnvVarStatus, ProviderStatus, provider_statuses
 from paperhound.search.openalex import OpenAlexProvider
 from paperhound.search.registry import (
     build,
@@ -33,8 +39,11 @@ __all__ = [
     "CrossrefProvider",
     "DBLPProvider",
     "DEFAULT_TIMEOUT",
+    "EnvVarStatus",
     "HuggingFaceProvider",
     "OpenAlexProvider",
+    "ProviderEnvVar",
+    "ProviderStatus",
     "SearchAggregator",
     "SearchProvider",
     "SearchQuery",
@@ -42,6 +51,7 @@ __all__ = [
     "build",
     "build_many",
     "names",
+    "provider_statuses",
     "register",
     "resolve",
 ]

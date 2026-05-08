@@ -65,6 +65,11 @@ class DBLPProvider(SearchProvider):
     """Free, no-key CS publication search via the DBLP JSON API."""
 
     name = "dblp"
+    description = (
+        "DBLP — computer-science bibliography. Strong venue / author coverage for"
+        " CS conferences and journals. Text search only (no id lookup)."
+    )
+    homepage = "https://dblp.org/"
     capabilities = frozenset({Capability.TEXT_SEARCH})
 
     def __init__(

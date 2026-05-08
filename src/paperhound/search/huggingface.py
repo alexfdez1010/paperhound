@@ -55,6 +55,11 @@ class HuggingFaceProvider(SearchProvider):
     """Calls huggingface.co/api/papers — free, no key, AI/ML focused."""
 
     name = "huggingface"
+    description = (
+        "Hugging Face Papers — curated daily AI/ML feed (successor to Papers with"
+        " Code). Best signal for trending arXiv preprints in ML."
+    )
+    homepage = "https://huggingface.co/papers"
     capabilities = frozenset(
         {Capability.TEXT_SEARCH, Capability.ID_LOOKUP, Capability.OPEN_ACCESS_PDF}
     )
