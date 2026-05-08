@@ -1,5 +1,85 @@
 # 🛠️ Development
 
+## Architecture
+
+paperhound is a thin CLI on top of a library of small, composable modules.
+The CLI (`paperhound.cli`) and the public helpers re-exported from
+`paperhound/__init__.py` (`search_papers`, `get_paper`,
+`convert_to_markdown`, `Library`) are the only user-facing surface — every
+other module is a building block they wire together.
+
+The data flow has three stages:
+
+1. **Search / lookup.** The `SearchAggregator` fans a `SearchQuery` (or an
+   identifier) out to every eligible `SearchProvider` in parallel under a
+   global timeout, then round-robin-merges the per-provider results into
+   a deduplicated `list[Paper]`. Identifier lookups go through
+   `_merge_lookups`, which trusts the authoritative provider for the id
+   kind (arXiv → `arxiv`, DOI → `crossref`/`openalex`, S2 → `semantic_scholar`)
+   and drops non-authoritative records whose title disagrees — the
+   metadata-poisoning guard.
+2. **Download / convert.** `paperhound.download` resolves a `Paper` to a
+   PDF URL and streams it to disk; `paperhound.convert` runs docling to
+   turn the PDF into Markdown. Both are pure functions over `Paper` /
+   path arguments — no provider state.
+3. **Persist / export.** `paperhound.library.Library` owns the
+   on-disk cache (`~/.paperhound/`), and `paperhound.citation_export`
+   formats `Paper` records as BibTeX / RIS / CSL-JSON. `paperhound.rerank`
+   is an optional cross-encoder pass over a result list.
+
+Providers live under `paperhound.search.<provider>` and register
+themselves through `paperhound.search.registry`. Each one implements
+`SearchProvider` (`name`, `capabilities`, `available()`, `search()`,
+`get()`) and declares its env vars via `ProviderEnvVar` so
+`paperhound providers` can render setup hints. Adding a new source =
+new module + registry entry; the aggregator picks it up automatically.
+
+```mermaid
+flowchart TD
+    CLI["paperhound.cli<br/>(typer app)"]
+    API["paperhound.__init__<br/>search_papers / get_paper / Library"]
+    AGG["search.aggregator<br/>SearchAggregator"]
+    REG["search.registry<br/>build / resolve"]
+    BASE["search.base<br/>SearchProvider · SearchQuery · Capability"]
+
+    subgraph providers["search providers (parallel, timeout-bounded)"]
+        ARX[arxiv_provider]
+        OA[openalex]
+        DBLP[dblp]
+        CR[crossref]
+        HF[huggingface]
+        S2[semantic_scholar]
+        CORE[core]
+    end
+
+    DL[download]
+    CONV["convert<br/>(docling)"]
+    LIB["library.Library<br/>(~/.paperhound)"]
+    CITE[citations]
+    EXPORT["citation_export<br/>(BibTeX/RIS/CSL-JSON)"]
+    RERANK["rerank<br/>(optional cross-encoder)"]
+    MODELS["models<br/>Paper · PaperIdentifier · SearchFilters"]
+    FILT[filtering]
+    IDENT[identifiers]
+
+    CLI --> API
+    CLI --> AGG
+    API --> AGG
+    AGG --> REG
+    REG --> BASE
+    BASE --> providers
+    AGG --> providers
+    AGG --> FILT
+    AGG --> IDENT
+    providers --> MODELS
+    AGG --> RERANK
+    CLI --> DL --> CONV
+    CLI --> LIB
+    CLI --> CITE --> EXPORT
+    LIB --> MODELS
+    EXPORT --> MODELS
+```
+
 ## Setup
 
 ```bash
