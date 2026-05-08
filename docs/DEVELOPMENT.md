@@ -34,6 +34,29 @@ themselves through `paperhound.search.registry`. Each one implements
 `paperhound providers` can render setup hints. Adding a new source =
 new module + registry entry; the aggregator picks it up automatically.
 
+### Package layout
+
+Four user-facing namespaces are packages with split-out internals so no
+single file blows past a few hundred lines:
+
+- `paperhound.cli` — `app` + helpers in `__init__.py`; one module per
+  command group under `cli/_commands/` (`search`, `show`, `download`,
+  `convert`, `get`, `library`, `citations`, `providers`); logging and
+  help epilogs in `cli/_logging.py` and `cli/_help.py`.
+- `paperhound.library` — public API in `__init__.py`; SQLite schema in
+  `_schema.py`, dataclasses in `_models.py`, paths in `_paths.py`,
+  pure-text helpers in `_keys.py`, the `Library` class in `_db.py`.
+- `paperhound.citations` — `CitationBackend` ABC in `_base.py`,
+  concrete backends in `_openalex.py` / `_semantic_scholar.py`, dedup
+  in `_dedup.py`, BFS traversal + public `fetch_references` /
+  `fetch_citations` in `_traversal.py`.
+- `paperhound.citation_export` — shared formatting helpers in
+  `_common.py`, one module per output format (`bibtex.py`, `ris.py`,
+  `csl.py`), dispatcher in `__init__.py`.
+
+Public import paths (`from paperhound.library import Library`,
+`from paperhound.citations import fetch_references`, …) are unchanged.
+
 ```mermaid
 flowchart TD
     CLI["paperhound.cli<br/>(typer app)"]
