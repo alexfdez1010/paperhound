@@ -12,13 +12,19 @@ import httpx
 from paperhound.errors import ProviderError
 from paperhound.identifiers import IdentifierKind, detect, to_semantic_scholar_lookup
 from paperhound.models import Author, Paper, PaperIdentifier
+from paperhound.search._pubtype import (
+    from_semantic_scholar as _pubtype_from_s2,
+)
+from paperhound.search._pubtype import (
+    to_s2_filter as _pubtype_to_s2_filter,
+)
 from paperhound.search.base import ProviderEnvVar, SearchProvider, SearchQuery
 
 logger = logging.getLogger(__name__)
 
 S2_BASE_URL = "https://api.semanticscholar.org/graph/v1"
 S2_FIELDS = (
-    "paperId,title,abstract,year,venue,url,citationCount,"
+    "paperId,title,abstract,year,venue,url,citationCount,publicationTypes,"
     "externalIds,openAccessPdf,authors.name,authors.affiliations"
 )
 
@@ -44,6 +50,7 @@ def _s2_to_paper(payload: dict[str, Any]) -> Paper:
         abstract=payload.get("abstract"),
         year=payload.get("year"),
         venue=payload.get("venue") or None,
+        publication_type=_pubtype_from_s2(payload.get("publicationTypes")),
         url=payload.get("url"),
         pdf_url=pdf_block.get("url") or None,
         citation_count=payload.get("citationCount"),
@@ -192,6 +199,10 @@ class SemanticScholarProvider(SearchProvider):
             params["year"] = f"{lo}-{hi}"
         if query.filters and query.filters.min_citations is not None:
             params["minCitationCount"] = query.filters.min_citations
+        if query.filters and query.filters.publication_types:
+            type_filter = _pubtype_to_s2_filter(query.filters.publication_types)
+            if type_filter:
+                params["publicationTypes"] = type_filter
         resp = self._request("search", f"{S2_BASE_URL}/paper/search", params)
         data = resp.json()
         return [_s2_to_paper(item) for item in data.get("data") or []]

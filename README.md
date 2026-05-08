@@ -135,14 +135,16 @@ paperhound show 1706.03762 --json | jq .abstract
 ```
 
 Schema: `paperhound.models.Paper` via `model_dump(mode="json")`. Fields
-include `title`, `authors[]`, `abstract`, `year`, `venue`, `url`,
-`pdf_url`, `citation_count`, `identifiers.{arxiv_id,doi,…}`, `sources[]`.
+include `title`, `authors[]`, `abstract`, `year`, `venue`,
+`publication_type` (`journal`/`conference`/`preprint`/`book`/`other`),
+`url`, `pdf_url`, `citation_count`, `identifiers.{arxiv_id,doi,…}`,
+`sources[]`.
 
 ### 🎚️ Filters
 
-`paperhound search` supports four filters, pushed down to providers
-that support them (OpenAlex, Crossref, Semantic Scholar) and re-applied
-client-side as a safety net.
+`paperhound search` supports the filters below, pushed down to
+providers that support them (OpenAlex, Crossref, Semantic Scholar) and
+re-applied client-side as a safety net.
 
 | Flag | Accepted values | Example |
 |---|---|---|
@@ -150,15 +152,21 @@ client-side as a safety net.
 | `--min-citations N` | integer ≥ 0 | `--min-citations 100` |
 | `--venue STRING` | case-insensitive substring | `--venue NeurIPS` |
 | `--author STRING` | case-insensitive substring | `--author Hinton` |
+| `--type T[,T…]` | `journal`, `conference`, `preprint`, `book`, `other` (repeatable) | `--type journal,conference` |
+| `--peer-reviewed` | shortcut for `--type journal,conference,book` | `--peer-reviewed` |
+| `--preprints-only` | shortcut for `--type preprint` | `--preprints-only` |
 
 ```bash
 paperhound search "vision transformers" --year 2022-2024 --min-citations 100
 paperhound search "deep learning" --venue NeurIPS --author Hinton
+paperhound search "diffusion models" --peer-reviewed
+paperhound search "agentic workflows" --preprints-only
 ```
 
 Papers with unknown `year`/`venue` are kept (filter unverifiable);
-papers with unknown `citation_count` are excluded when `--min-citations`
-is set.
+papers with unknown `citation_count` or unknown `publication_type` are
+excluded when the matching filter (`--min-citations`, `--type`,
+`--peer-reviewed`, or `--preprints-only`) is set.
 
 ### 📑 Conversion options
 

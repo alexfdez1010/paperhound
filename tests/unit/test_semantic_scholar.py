@@ -19,6 +19,7 @@ def _sample_payload() -> dict:
         "abstract": "We propose a new architecture.",
         "year": 2017,
         "venue": "NeurIPS",
+        "publicationTypes": ["JournalArticle"],
         "url": "https://www.semanticscholar.org/paper/abc",
         "citationCount": 100000,
         "externalIds": {"ArXiv": "1706.03762", "DOI": "10.1/x"},
@@ -45,6 +46,7 @@ def test_search_parses_results() -> None:
     assert paper.identifiers.doi == "10.1/x"
     assert paper.pdf_url == "https://arxiv.org/pdf/1706.03762.pdf"
     assert paper.authors[0].affiliation == "Google"
+    assert paper.publication_type == "journal"
     assert paper.sources == ["semantic_scholar"]
 
 
@@ -144,6 +146,30 @@ def test_search_pushes_down_min_citations() -> None:
     with SemanticScholarProvider() as provider:
         provider.search(SearchQuery(text="x", limit=3, filters=filters))
     assert route.calls[0].request.url.params["minCitationCount"] == "100"
+
+
+@respx.mock
+def test_search_pushes_down_publication_types_when_mappable() -> None:
+    route = respx.get(f"{S2_BASE_URL}/paper/search").mock(
+        return_value=httpx.Response(200, json={"data": []})
+    )
+    filters = SearchFilters(publication_types=frozenset({"journal", "conference"}))
+    with SemanticScholarProvider() as provider:
+        provider.search(SearchQuery(text="x", limit=3, filters=filters))
+    sent = route.calls[0].request.url.params["publicationTypes"].split(",")
+    assert "JournalArticle" in sent and "Conference" in sent
+
+
+@respx.mock
+def test_search_publication_types_skipped_for_preprint() -> None:
+    """S2 has no preprint type — push-down aborts so client-side filter runs."""
+    route = respx.get(f"{S2_BASE_URL}/paper/search").mock(
+        return_value=httpx.Response(200, json={"data": []})
+    )
+    filters = SearchFilters(publication_types=frozenset({"preprint"}))
+    with SemanticScholarProvider() as provider:
+        provider.search(SearchQuery(text="x", limit=3, filters=filters))
+    assert "publicationTypes" not in route.calls[0].request.url.params
 
 
 @respx.mock

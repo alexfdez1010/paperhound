@@ -12,6 +12,12 @@ from paperhound.search.arxiv_provider import ArxivProvider, _result_to_paper
 from paperhound.search.base import SearchQuery
 
 
+def test_arxiv_paper_publication_type_is_preprint() -> None:
+    """Every arXiv result is a preprint by construction."""
+    paper = _result_to_paper(FakeResult())
+    assert paper.publication_type == "preprint"
+
+
 class FakeAuthor:
     def __init__(self, name: str) -> None:
         self.name = name

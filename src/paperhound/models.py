@@ -3,11 +3,20 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
 _WHITESPACE_RE = re.compile(r"\s+")
+
+# Normalized publication-type vocabulary. ``None`` means the provider did not
+# tell us — kept on a paper unless a publication-type filter is set.
+PublicationType = Literal["journal", "conference", "preprint", "book", "other"]
+PUBLICATION_TYPES: frozenset[str] = frozenset(
+    {"journal", "conference", "preprint", "book", "other"}
+)
+PEER_REVIEWED_TYPES: frozenset[str] = frozenset({"journal", "conference", "book"})
 
 
 def _normalize_whitespace(value: str | None) -> str | None:
@@ -32,11 +41,19 @@ class SearchFilters:
     min_citations: int | None = None
     venue: str | None = None
     author: str | None = None
+    publication_types: frozenset[str] | None = field(default=None)
 
     def is_empty(self) -> bool:
         return all(
             v is None
-            for v in (self.year_min, self.year_max, self.min_citations, self.venue, self.author)
+            for v in (
+                self.year_min,
+                self.year_max,
+                self.min_citations,
+                self.venue,
+                self.author,
+                self.publication_types,
+            )
         )
 
 
@@ -81,6 +98,7 @@ class Paper(BaseModel):
     abstract: str | None = None
     year: int | None = None
     venue: str | None = None
+    publication_type: PublicationType | None = None
     url: str | None = None
     pdf_url: str | None = None
     citation_count: int | None = None
@@ -113,6 +131,7 @@ class Paper(BaseModel):
         merged.abstract = self.abstract or other.abstract
         merged.year = self.year or other.year
         merged.venue = self.venue or other.venue
+        merged.publication_type = self.publication_type or other.publication_type
         merged.url = self.url or other.url
         merged.pdf_url = self.pdf_url or other.pdf_url
         merged.citation_count = (

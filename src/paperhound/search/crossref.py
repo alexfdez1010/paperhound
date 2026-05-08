@@ -12,6 +12,7 @@ import httpx
 from paperhound.errors import ProviderError
 from paperhound.identifiers import IdentifierKind, detect
 from paperhound.models import Author, Paper, PaperIdentifier
+from paperhound.search._pubtype import from_crossref as _pubtype_from_crossref
 from paperhound.search.base import (
     Capability,
     ProviderEnvVar,
@@ -84,6 +85,7 @@ def _payload_to_paper(item: dict[str, Any]) -> Paper:
         abstract=_clean_abstract(item.get("abstract")),
         year=_year_from_issued(item.get("issued")),
         venue=venue,
+        publication_type=_pubtype_from_crossref(item.get("type")),
         url=item.get("URL"),
         pdf_url=_pdf_link(item),
         citation_count=item.get("is-referenced-by-count"),

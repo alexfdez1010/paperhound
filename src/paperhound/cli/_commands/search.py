@@ -8,8 +8,8 @@ import typer
 
 from paperhound import cli
 from paperhound.errors import PaperhoundError, RerankError
-from paperhound.filtering import parse_year_range
-from paperhound.models import SearchFilters
+from paperhound.filtering import parse_publication_types, parse_year_range
+from paperhound.models import PEER_REVIEWED_TYPES, SearchFilters
 from paperhound.output import papers_to_jsonl, render_table
 from paperhound.search import SearchQuery
 
@@ -26,6 +26,9 @@ _RERANK_CANDIDATE_CAP = 50
         '  paperhound search "graph neural networks" -s arxiv --year 2023-\n'
         '  paperhound search "llm agents" --year 2020-2024 --min-citations 50\n'
         '  paperhound search "transformers" --venue NeurIPS --author Hinton\n'
+        '  paperhound search "diffusion models" --peer-reviewed\n'
+        '  paperhound search "rag" --type journal,conference\n'
+        '  paperhound search "agentic workflows" --preprints-only\n'
         '  paperhound search "llm agents" --json | jq .\n'
         '  paperhound search "transformers" --no-rerank\n'
         '  paperhound search "vision language"'
@@ -78,6 +81,28 @@ def search(
         "--author",
         help="Case-insensitive substring match against any author name.",
     ),
+    pub_type: list[str] | None = typer.Option(
+        None,
+        "--type",
+        help=(
+            "Filter by publication type (repeatable / comma-separated)."
+            " Allowed: journal, conference, preprint, book, other."
+            " Papers with unknown type are excluded."
+        ),
+    ),
+    peer_reviewed: bool = typer.Option(
+        False,
+        "--peer-reviewed",
+        help=(
+            "Shortcut for --type journal,conference,book. Drops preprints and"
+            " papers with unknown publication type."
+        ),
+    ),
+    preprints_only: bool = typer.Option(
+        False,
+        "--preprints-only",
+        help="Shortcut for --type preprint.",
+    ),
     timeout: float = typer.Option(
         cli.DEFAULT_TIMEOUT,
         "--timeout",
@@ -116,12 +141,24 @@ def search(
         if year_max is None:
             year_max = parsed_max
 
+    if peer_reviewed and preprints_only:
+        raise typer.BadParameter("--peer-reviewed and --preprints-only are mutually exclusive.")
+    try:
+        types = parse_publication_types(pub_type)
+    except PaperhoundError as exc:
+        raise typer.BadParameter(str(exc), param_hint="'--type'") from exc
+    if peer_reviewed:
+        types = (types or frozenset()) | PEER_REVIEWED_TYPES
+    if preprints_only:
+        types = (types or frozenset()) | frozenset({"preprint"})
+
     filters = SearchFilters(
         year_min=year_min,
         year_max=year_max,
         min_citations=min_citations,
         venue=venue,
         author=author,
+        publication_types=types,
     )
     if filters.is_empty():
         filters = None  # type: ignore[assignment]

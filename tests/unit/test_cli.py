@@ -243,6 +243,59 @@ def test_search_author_wires_through(
     assert agg.last_query.filters.author == "Hinton"
 
 
+def test_search_peer_reviewed_wires_through(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, fake_paper: Paper
+) -> None:
+    agg = FilterCapturingAggregator([fake_paper])
+    monkeypatch.setattr(cli_module, "_build_aggregator", lambda *a, **kw: agg)
+    result = runner.invoke(cli_module.app, ["search", "x", "--peer-reviewed"])
+    assert result.exit_code == 0
+    types = agg.last_query.filters.publication_types
+    assert types == frozenset({"journal", "conference", "book"})
+
+
+def test_search_preprints_only_wires_through(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, fake_paper: Paper
+) -> None:
+    agg = FilterCapturingAggregator([fake_paper])
+    monkeypatch.setattr(cli_module, "_build_aggregator", lambda *a, **kw: agg)
+    result = runner.invoke(cli_module.app, ["search", "x", "--preprints-only"])
+    assert result.exit_code == 0
+    assert agg.last_query.filters.publication_types == frozenset({"preprint"})
+
+
+def test_search_type_flag_comma_separated_wires_through(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, fake_paper: Paper
+) -> None:
+    agg = FilterCapturingAggregator([fake_paper])
+    monkeypatch.setattr(cli_module, "_build_aggregator", lambda *a, **kw: agg)
+    result = runner.invoke(cli_module.app, ["search", "x", "--type", "journal,conference"])
+    assert result.exit_code == 0
+    assert agg.last_query.filters.publication_types == frozenset({"journal", "conference"})
+
+
+def test_search_peer_reviewed_and_preprints_only_conflict(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def boom(*_a, **_k):
+        raise AssertionError("aggregator should not be built when flags conflict")
+
+    monkeypatch.setattr(cli_module, "_build_aggregator", boom)
+    result = runner.invoke(cli_module.app, ["search", "x", "--peer-reviewed", "--preprints-only"])
+    assert result.exit_code != 0
+    assert "mutually exclusive" in (result.stdout + result.stderr).lower()
+
+
+def test_search_bad_type_exits_nonzero(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(*_a, **_k):
+        raise AssertionError("aggregator should not be built for bad --type")
+
+    monkeypatch.setattr(cli_module, "_build_aggregator", boom)
+    result = runner.invoke(cli_module.app, ["search", "x", "--type", "workshop"])
+    assert result.exit_code != 0
+    assert "workshop" in (result.stdout + result.stderr).lower()
+
+
 def test_search_bad_year_exits_nonzero(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
     def boom(*_a, **_k):
         raise AssertionError("aggregator should not be built for bad year")

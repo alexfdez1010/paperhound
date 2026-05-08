@@ -20,6 +20,7 @@ def _result_to_paper(result: arxiv.Result) -> Paper:
         abstract=(result.summary or "").strip() or None,
         year=result.published.year if result.published else None,
         venue="arXiv",
+        publication_type="preprint",
         url=result.entry_id,
         pdf_url=result.pdf_url,
         identifiers=PaperIdentifier(arxiv_id=canonical, doi=result.doi or None),

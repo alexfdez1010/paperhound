@@ -40,6 +40,7 @@ def test_search_parses_results() -> None:
     assert paper.year == 2017
     assert paper.pdf_url == "https://arxiv.org/pdf/1706.03762.pdf"
     assert paper.citation_count == 42
+    assert paper.publication_type == "preprint"
 
 
 @respx.mock

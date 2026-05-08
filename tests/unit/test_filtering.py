@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from paperhound.errors import PaperhoundError
-from paperhound.filtering import apply_filters, parse_year_range
+from paperhound.filtering import apply_filters, parse_publication_types, parse_year_range
 from paperhound.models import Author, Paper, PaperIdentifier, SearchFilters
 
 # ---------------------------------------------------------------------------
@@ -64,6 +64,7 @@ def _make_paper(
     citation_count: int | None = 10,
     venue: str | None = "NeurIPS",
     authors: list[str] | None = None,
+    publication_type: str | None = None,
 ) -> Paper:
     if authors is None:
         authors = ["Alice Smith"]
@@ -73,6 +74,7 @@ def _make_paper(
         year=year,
         citation_count=citation_count,
         venue=venue,
+        publication_type=publication_type,  # type: ignore[arg-type]
         identifiers=PaperIdentifier(),
         sources=["arxiv"],
     )
@@ -176,6 +178,70 @@ def test_apply_filters_author_no_authors_on_paper_kept() -> None:
     paper = _make_paper(authors=[])
     result = apply_filters([paper], SearchFilters(author="Hinton"))
     assert result == [paper]
+
+
+# ---------------------------------------------------------------------------
+# apply_filters — publication_type
+# ---------------------------------------------------------------------------
+
+
+def test_apply_filters_publication_types_keeps_matching() -> None:
+    paper = _make_paper(publication_type="journal")
+    filters = SearchFilters(publication_types=frozenset({"journal", "conference"}))
+    assert apply_filters([paper], filters) == [paper]
+
+
+def test_apply_filters_publication_types_drops_non_matching() -> None:
+    paper = _make_paper(publication_type="preprint")
+    filters = SearchFilters(publication_types=frozenset({"journal", "conference"}))
+    assert apply_filters([paper], filters) == []
+
+
+def test_apply_filters_publication_types_drops_unknown() -> None:
+    """Papers with publication_type=None are excluded when filter is set."""
+    paper = _make_paper(publication_type=None)
+    filters = SearchFilters(publication_types=frozenset({"journal"}))
+    assert apply_filters([paper], filters) == []
+
+
+def test_apply_filters_peer_reviewed_drops_preprint_and_unknown() -> None:
+    journal = _make_paper(title="J", publication_type="journal")
+    conference = _make_paper(title="C", publication_type="conference")
+    book = _make_paper(title="B", publication_type="book")
+    preprint = _make_paper(title="P", publication_type="preprint")
+    untagged = _make_paper(title="U", publication_type=None)
+    filters = SearchFilters(publication_types=frozenset({"journal", "conference", "book"}))
+    result = apply_filters([journal, conference, book, preprint, untagged], filters)
+    assert [p.title for p in result] == ["J", "C", "B"]
+
+
+# ---------------------------------------------------------------------------
+# parse_publication_types
+# ---------------------------------------------------------------------------
+
+
+def test_parse_publication_types_none_returns_none() -> None:
+    assert parse_publication_types(None) is None
+    assert parse_publication_types([]) is None
+
+
+def test_parse_publication_types_single_value() -> None:
+    assert parse_publication_types(["journal"]) == frozenset({"journal"})
+
+
+def test_parse_publication_types_comma_separated() -> None:
+    assert parse_publication_types(["journal,conference"]) == frozenset({"journal", "conference"})
+
+
+def test_parse_publication_types_repeatable_and_case_insensitive() -> None:
+    assert parse_publication_types(["JOURNAL", "Conference,Book"]) == frozenset(
+        {"journal", "conference", "book"}
+    )
+
+
+def test_parse_publication_types_unknown_raises() -> None:
+    with pytest.raises(PaperhoundError, match="workshop"):
+        parse_publication_types(["workshop"])
 
 
 # ---------------------------------------------------------------------------

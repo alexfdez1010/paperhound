@@ -12,6 +12,7 @@ All commands accept `-h` / `--help` for the live help text. Global flag
 ```bash
 paperhound search "<query>" \
   [--limit N] [--year RANGE] [--min-citations N] [--venue STRING] [--author STRING] \
+  [--type T[,T...]] [--peer-reviewed] [--preprints-only] \
   [--source arxiv|openalex|dblp|crossref|huggingface|semantic_scholar|core] \
   [--timeout SECONDS] [--json] [--rerank/--no-rerank] [--rerank-model NAME]
 ```
@@ -23,15 +24,18 @@ paperhound search "<query>" \
 | `--min-citations` | unset | Papers with unknown citation count are excluded. |
 | `--venue` | unset | Case-insensitive substring match. |
 | `--author` | unset | Case-insensitive substring match against any author. |
+| `--type` | unset | One or more of `journal`, `conference`, `preprint`, `book`, `other`. Repeatable / comma-separated. Papers with unknown publication type are excluded. |
+| `--peer-reviewed` | off | Shortcut for `--type journal,conference,book` — drops preprints and untagged records. |
+| `--preprints-only` | off | Shortcut for `--type preprint`. Mutually exclusive with `--peer-reviewed`. |
 | `--source`, `-s` | `arxiv,openalex,dblp,crossref,huggingface` | Repeatable. Use `-s s2` / `-s core` to opt into Semantic Scholar / CORE. |
 | `--timeout` | `10` | Seconds. Slow providers are dropped silently. |
 | `--json` | off | Emits **JSONL**, one `Paper` per line. |
 | `--rerank/--no-rerank` | on (if extra installed) | Embedding rerank using sentence-transformers. |
 | `--rerank-model` | `sentence-transformers/all-MiniLM-L6-v2` | HF model id. |
 
-**Filter push-down**: `--year`, `--min-citations`, `--venue`, `--author` are
-pushed down to OpenAlex / Crossref / Semantic Scholar where supported; always
-re-applied client-side after the merge so the cap is exact.
+**Filter push-down**: `--year`, `--min-citations`, `--venue`, `--author`, and
+`--type` (where expressible) are pushed down to OpenAlex / Crossref / Semantic
+Scholar; always re-applied client-side after the merge so the cap is exact.
 
 **Rerank install**: `pip install 'paperhound[rerank]'`. Without the extra,
 the CLI silently falls back to merge order — never errors.

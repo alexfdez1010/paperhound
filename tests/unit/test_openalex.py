@@ -19,10 +19,11 @@ def _sample_work() -> dict:
         "title": "Attention Is All You Need",
         "publication_year": 2017,
         "cited_by_count": 100000,
+        "type": "article",
         "ids": {"arxiv": "https://arxiv.org/abs/1706.03762"},
         "primary_location": {
             "pdf_url": "https://example.org/x.pdf",
-            "source": {"display_name": "NeurIPS"},
+            "source": {"display_name": "NeurIPS", "type": "conference"},
         },
         "best_oa_location": {"pdf_url": "https://oa.example/x.pdf"},
         "abstract_inverted_index": {"Hello": [0], "world": [1]},
@@ -55,6 +56,7 @@ def test_search_parses_results() -> None:
     assert paper.identifiers.arxiv_id == "1706.03762"
     assert paper.pdf_url == "https://oa.example/x.pdf"
     assert paper.venue == "NeurIPS"
+    assert paper.publication_type == "conference"
     assert paper.abstract == "Hello world"
     assert paper.authors[0].affiliation == "Google"
     assert paper.sources == ["openalex"]
@@ -141,6 +143,29 @@ def test_search_pushes_down_author_filter() -> None:
         provider.search(SearchQuery(text="x", limit=2, filters=filters))
     filter_param = route.calls[0].request.url.params["filter"]
     assert "authorships.author.display_name.search:Hinton" in filter_param
+
+
+@respx.mock
+def test_search_pushes_down_publication_types() -> None:
+    route = respx.get(f"{OPENALEX_BASE_URL}/works").mock(
+        return_value=httpx.Response(200, json={"results": []})
+    )
+    filters = SearchFilters(publication_types=frozenset({"preprint"}))
+    with OpenAlexProvider() as provider:
+        provider.search(SearchQuery(text="x", limit=3, filters=filters))
+    assert "type:preprint" in route.calls[0].request.url.params["filter"]
+
+
+@respx.mock
+def test_search_publication_type_pushdown_skipped_for_unmappable() -> None:
+    """Unknown normalized types are not pushed down — client-side handles it."""
+    route = respx.get(f"{OPENALEX_BASE_URL}/works").mock(
+        return_value=httpx.Response(200, json={"results": []})
+    )
+    filters = SearchFilters(publication_types=frozenset({"workshop"}))  # type: ignore[arg-type]
+    with OpenAlexProvider() as provider:
+        provider.search(SearchQuery(text="x", limit=3, filters=filters))
+    assert "type:" not in route.calls[0].request.url.params.get("filter", "")
 
 
 @respx.mock

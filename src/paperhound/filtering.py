@@ -53,6 +53,10 @@ def apply_filters(papers: list[Paper], filters: SearchFilters | None) -> list[Pa
       asked for a minimum).
     - ``venue``: a paper with ``venue=None`` is **kept**.
     - ``author``: a paper with no authors is **kept**.
+    - ``publication_types``: a paper with ``publication_type=None`` is
+      **excluded** when the filter is set — when the user asks for a specific
+      type (e.g. peer-reviewed only), an unlabeled record is treated the same
+      way as a missing citation count.
 
     All string comparisons are case-insensitive substring matches.
     """
@@ -77,5 +81,35 @@ def apply_filters(papers: list[Paper], filters: SearchFilters | None) -> list[Pa
             needle = filters.author.lower()
             if not any(needle in a.name.lower() for a in paper.authors):
                 continue
+        if filters.publication_types is not None:
+            if paper.publication_type is None:
+                continue
+            if paper.publication_type not in filters.publication_types:
+                continue
         out.append(paper)
     return out
+
+
+def parse_publication_types(values: list[str] | None) -> frozenset[str] | None:
+    """Parse repeated/comma-separated ``--type`` values into a normalized set.
+
+    Returns ``None`` when *values* is empty so callers can leave
+    ``SearchFilters.publication_types`` unset.
+
+    Raises :exc:`paperhound.errors.PaperhoundError` on unknown types.
+    """
+    from paperhound.models import PUBLICATION_TYPES
+
+    if not values:
+        return None
+    out: set[str] = set()
+    for raw in values:
+        for piece in raw.split(","):
+            token = piece.strip().lower()
+            if not token:
+                continue
+            if token not in PUBLICATION_TYPES:
+                allowed = ", ".join(sorted(PUBLICATION_TYPES))
+                raise PaperhoundError(f"Unknown publication type {token!r}. Allowed: {allowed}.")
+            out.add(token)
+    return frozenset(out) if out else None

@@ -43,6 +43,7 @@ def _payload_to_paper(payload: dict[str, Any]) -> Paper:
         authors=authors,
         abstract=abstract,
         year=year,
+        publication_type="preprint",
         url=f"https://huggingface.co/papers/{arxiv_id}" if arxiv_id else None,
         pdf_url=f"https://arxiv.org/pdf/{arxiv_id}.pdf" if arxiv_id else None,
         citation_count=payload.get("upvotes"),

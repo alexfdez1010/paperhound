@@ -11,11 +11,17 @@ from paperhound.search.base import SearchQuery
 from paperhound.search.dblp import DBLP_BASE_URL, DBLPProvider
 
 
-def _hit(title: str, year: str = "2020", arxiv: str | None = None) -> dict:
+def _hit(
+    title: str,
+    year: str = "2020",
+    arxiv: str | None = None,
+    type_: str = "Conference and Workshop Papers",
+) -> dict:
     info: dict = {
         "title": title,
         "year": year,
         "venue": "NeurIPS",
+        "type": type_,
         "key": "conf/nips/x",
         "doi": "10.1234/x",
         "url": "https://dblp.org/x",
@@ -45,6 +51,7 @@ def test_search_parses_hits() -> None:
     assert paper.identifiers.doi == "10.1234/x"
     assert paper.identifiers.arxiv_id == "2401.12345"
     assert [a.name for a in paper.authors] == ["Alice", "Bob"]
+    assert paper.publication_type == "conference"
 
 
 @respx.mock

@@ -17,6 +17,7 @@ def _sample_item() -> dict:
         "DOI": "10.1234/x",
         "title": ["Attention Is All You Need"],
         "container-title": ["NeurIPS"],
+        "type": "proceedings-article",
         "issued": {"date-parts": [[2017, 6, 12]]},
         "is-referenced-by-count": 100000,
         "URL": "https://doi.org/10.1234/x",
@@ -49,6 +50,7 @@ def test_search_parses_results() -> None:
     assert paper.authors[0].name == "Ashish Vaswani"
     assert paper.authors[0].affiliation == "Google"
     assert paper.citation_count == 100000
+    assert paper.publication_type == "conference"
 
 
 @respx.mock

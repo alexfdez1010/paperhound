@@ -11,6 +11,12 @@ import httpx
 from paperhound.errors import ProviderError
 from paperhound.identifiers import IdentifierKind, detect
 from paperhound.models import Author, Paper, PaperIdentifier
+from paperhound.search._pubtype import (
+    from_openalex as _pubtype_from_openalex,
+)
+from paperhound.search._pubtype import (
+    to_openalex_filter as _pubtype_to_openalex_filter,
+)
 from paperhound.search.base import (
     Capability,
     ProviderEnvVar,
@@ -63,9 +69,16 @@ def _payload_to_paper(payload: dict[str, Any]) -> Paper:
     best_oa = (payload.get("best_oa_location") or {}) if payload else {}
     pdf_url = best_oa.get("pdf_url") or primary_loc.get("pdf_url")
     venue = None
+    source_type = None
     source = primary_loc.get("source") or {}
     if isinstance(source, dict):
         venue = source.get("display_name")
+        source_type = source.get("type")
+    publication_type = _pubtype_from_openalex(
+        payload.get("type"),
+        type_crossref=payload.get("type_crossref"),
+        source_type=source_type,
+    )
     authors: list[Author] = []
     for entry in payload.get("authorships") or []:
         author_block = entry.get("author") or {}
@@ -84,6 +97,7 @@ def _payload_to_paper(payload: dict[str, Any]) -> Paper:
         abstract=_reconstruct_abstract(payload.get("abstract_inverted_index")),
         year=payload.get("publication_year"),
         venue=venue,
+        publication_type=publication_type,
         url=payload.get("doi") or _strip_openalex_id(payload.get("id")),
         pdf_url=pdf_url,
         citation_count=payload.get("cited_by_count"),
@@ -180,6 +194,11 @@ class OpenAlexProvider(SearchProvider):
         # Citation count floor — OpenAlex supports cited_by_count filter.
         if query.filters and query.filters.min_citations is not None:
             filter_parts.append(f"cited_by_count:>{query.filters.min_citations - 1}")
+        # Publication-type filter — push down when expressible in OpenAlex types.
+        if query.filters and query.filters.publication_types:
+            type_filter = _pubtype_to_openalex_filter(query.filters.publication_types)
+            if type_filter:
+                filter_parts.append(f"type:{type_filter}")
         if filter_parts:
             params["filter"] = ",".join(filter_parts)
         # Author name — use OpenAlex search param for authorships.

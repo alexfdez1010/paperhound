@@ -9,6 +9,7 @@ import httpx
 
 from paperhound.errors import ProviderError
 from paperhound.models import Author, Paper, PaperIdentifier
+from paperhound.search._pubtype import from_dblp as _pubtype_from_dblp
 from paperhound.search.base import Capability, SearchProvider, SearchQuery
 
 logger = logging.getLogger(__name__)
@@ -51,6 +52,7 @@ def _payload_to_paper(hit: dict[str, Any]) -> Paper:
         authors=authors,
         year=year_int,
         venue=info.get("venue"),
+        publication_type=_pubtype_from_dblp(info.get("type")),
         url=info.get("url") or ee,
         identifiers=PaperIdentifier(
             arxiv_id=arxiv_id,
