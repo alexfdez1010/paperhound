@@ -92,12 +92,7 @@
     position:relative;
     border-bottom:1px solid var(--rule);
   }
-  .hero-grid{
-    display:grid;
-    grid-template-columns: 1fr auto;
-    gap:48px;
-    align-items:end;
-  }
+  .hero-grid{display:block}
   .eyebrow{
     font-family:var(--mono);
     font-size:12px;
@@ -111,28 +106,40 @@
 
   h1.title{
     font-family:var(--serif);
-    font-weight:900;
-    font-variation-settings:"opsz" 144, "SOFT" 100, "WONK" 1;
-    font-size:clamp(72px, 14vw, 220px);
-    line-height:.82;
-    letter-spacing:-.04em;
+    font-weight:800;
+    font-variation-settings:"opsz" 144, "SOFT" 60, "WONK" 0;
+    font-size:clamp(68px, 12vw, 184px);
+    line-height:.88;
+    letter-spacing:-.045em;
     margin:0;
     color:var(--ink);
+    word-break:break-word;
   }
-  h1.title .amp{
+  h1.title .hound{
     color:var(--accent);
     font-style:italic;
-    font-weight:400;
+    font-weight:500;
     font-variation-settings:"opsz" 144, "SOFT" 100, "WONK" 1;
+    letter-spacing:-.035em;
   }
-  h1.title .paw{
-    display:inline-block;
-    transform:translateY(-.2em) rotate(-12deg);
+  .title-rule{
+    display:block;
+    width:min(560px, 90%);
+    height:16px;
     color:var(--accent);
-    font-size:.22em;
-    vertical-align:top;
-    margin-left:.08em;
+    margin:12px 0 0;
+    overflow:visible;
   }
+  .title-rule path{
+    stroke:currentColor;
+    stroke-width:3;
+    fill:none;
+    stroke-linecap:round;
+    stroke-dasharray:680;
+    stroke-dashoffset:680;
+    animation:drawRule 1.4s cubic-bezier(.4,.0,.2,1) .6s forwards;
+  }
+  @keyframes drawRule{to{stroke-dashoffset:0}}
   .lede{
     font-family:var(--serif);
     font-style:italic;
@@ -174,9 +181,13 @@
     letter-spacing:.1em;
   }
 
-  /* hero CTAs */
+  /* hero CTAs + hound row */
+  .hero-bottom{
+    margin-top:44px;
+    display:flex;flex-wrap:wrap;gap:32px;
+    align-items:flex-end;justify-content:space-between;
+  }
   .cta-row{
-    margin-top:40px;
     display:flex;flex-wrap:wrap;gap:14px;
     font-family:var(--mono);
     font-size:13px;
@@ -568,20 +579,12 @@
   .d1{animation-delay:.05s}.d2{animation-delay:.15s}.d3{animation-delay:.28s}
   .d4{animation-delay:.42s}.d5{animation-delay:.58s}.d6{animation-delay:.76s}
 
-  @keyframes pawTrot{
-    0%,100%{transform:translateY(-.2em) rotate(-12deg)}
-    50%{transform:translateY(-.35em) rotate(-3deg)}
-  }
-  h1.title .paw{animation:pawTrot 3.4s ease-in-out infinite}
-
   @media (prefers-reduced-motion: reduce){
     *{animation:none !important;transition:none !important}
   }
 
   /* ─── Responsive ──────────────────────────────────────────── */
   @media (max-width: 960px){
-    .hero-grid{grid-template-columns:1fr}
-    .hound{align-self:start;transform:rotate(.5deg)}
     .install-grid{grid-template-columns:1fr}
     .skill-wrap{grid-template-columns:1fr;gap:30px}
     .features{grid-template-columns:repeat(2,1fr)}
@@ -621,24 +624,29 @@
 <section class="hero">
   <div class="wrap">
     <div class="hero-grid">
-      <div>
-        <div class="eyebrow rise d1">
-          <span class="dot"></span>
-          <span>A CLI for the literature-hungry</span>
-        </div>
-        <h1 class="title rise d2">paper<span class="amp">·</span>hound<span class="paw">🐾</span></h1>
-        <p class="lede rise d3">
-          Sniff out academic papers from the command line —
-          <em>and from your agents.</em> One binary. Eight providers.
-          Markdown out, ready for an LLM context window.
-        </p>
+      <div class="eyebrow rise d1">
+        <span class="dot"></span>
+        <span>A field manual for paper-hunters</span>
+        <span aria-hidden="true">·</span>
+        <span>arXiv · OpenAlex · DBLP · Crossref · S2</span>
+      </div>
+      <h1 class="title rise d2">paper<span class="hound">hound</span></h1>
+      <svg class="title-rule rise d2" viewBox="0 0 600 18" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M3 10 C 60 4, 130 14, 210 8 S 360 16, 450 6 S 560 13, 597 9"/>
+      </svg>
+      <p class="lede rise d3">
+        Sniff out academic papers from the command line —
+        <em>and from your agents.</em> One binary. Eight providers.
+        Markdown out, ready for an LLM context window.
+      </p>
+
+      <div class="hero-bottom">
         <div class="cta-row rise d4">
           <a class="btn" href="#install">$ install paperhound <span class="arrow">→</span></a>
           <a class="btn ghost" href="#skill">Teach it to your agent</a>
         </div>
-      </div>
 
-      <pre class="hound rise d5" aria-hidden="true"><span class="tag">[ paperhound ]</span>
+        <pre class="hound rise d5" aria-hidden="true"><span class="tag">[ paperhound ]</span>
       __
   (___()'`;     ▸ sniffing arxiv
   /,    /`      ▸ sniffing openalex
@@ -646,6 +654,7 @@
                 ───────────────
                 ► 12,847 results
                   in 1.4s</pre>
+      </div>
     </div>
   </div>
 </section>
