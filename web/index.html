@@ -108,7 +108,6 @@
     margin-bottom:18px;
   }
   .eyebrow .dot{width:6px;height:6px;background:var(--accent);border-radius:50%;display:inline-block}
-  .eyebrow .vol::before{content:"Vol. 0.5.4 · "}
 
   h1.title{
     font-family:var(--serif);
@@ -155,20 +154,24 @@
   /* ASCII hound */
   .hound{
     font-family:var(--mono);
-    font-size:12px;
-    line-height:1.1;
+    font-size:13px;
+    line-height:1.35;
     white-space:pre;
     color:var(--ink);
-    padding:18px 20px;
+    padding:20px 24px;
     border:1px solid var(--rule);
     background:var(--paper-2);
     box-shadow:6px 6px 0 var(--ink);
-    transform:rotate(1.2deg);
     user-select:none;
+    display:inline-block;
+    margin-right:8px;
   }
   .hound .tag{
     color:var(--accent);
     font-weight:700;
+    display:block;
+    margin-bottom:8px;
+    letter-spacing:.1em;
   }
 
   /* hero CTAs */
@@ -529,7 +532,7 @@
     background:var(--paper);
   }
   .foot-grid{
-    display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:30px;
+    display:grid;grid-template-columns:1fr 1fr;gap:40px;
     align-items:start;
   }
   .foot-grid h5{
@@ -601,8 +604,8 @@
   <div class="wrap">
     <div class="mast-row">
       <div class="left">
-        <span>№ 0.5.4</span>
         <span>Established MMXXVI</span>
+        <span>Open Source · MIT</span>
       </div>
       <div class="center">— The Paperhound Press —</div>
       <div class="right">
@@ -621,7 +624,6 @@
       <div>
         <div class="eyebrow rise d1">
           <span class="dot"></span>
-          <span class="vol"></span>
           <span>A CLI for the literature-hungry</span>
         </div>
         <h1 class="title rise d2">paper<span class="amp">·</span>hound<span class="paw">🐾</span></h1>
@@ -636,15 +638,14 @@
         </div>
       </div>
 
-      <pre class="hound rise d5" aria-hidden="true">
-       __
-   (___()'`;     <span class="tag">[paperhound v0.5.4]</span>
-   /,    /`      sniffing arxiv...
-   \\\\"--\\\\     sniffing openalex...
-                 sniffing crossref...
-                 ► found 12,847 results
-                   in 1.4s
-      </pre>
+      <pre class="hound rise d5" aria-hidden="true"><span class="tag">[ paperhound ]</span>
+      __
+  (___()'`;     ▸ sniffing arxiv
+  /,    /`      ▸ sniffing openalex
+  \--'--'       ▸ sniffing crossref
+                ───────────────
+                ► 12,847 results
+                  in 1.4s</pre>
     </div>
   </div>
 </section>
@@ -864,18 +865,6 @@
   <div class="wrap">
     <div class="foot-grid">
       <div>
-        <h5>Colophon</h5>
-        <p>
-          <b>paperhound</b> is open-source under the MIT licence.
-          Built in Python with care, tested obsessively, shipped through
-          a single <code>pyproject.toml</code> version bump.
-        </p>
-        <p style="margin-top:14px">
-          Set with Fraunces &amp; JetBrains Mono on cream stock.
-          Pressed with HTML, CSS, and a small amount of JavaScript.
-        </p>
-      </div>
-      <div>
         <h5>Links</h5>
         <ul>
           <li><a href="https://github.com/alexfdez1010/paperhound">GitHub repository</a></li>
@@ -895,11 +884,6 @@
       </div>
     </div>
 
-    <div class="colophon">
-      <span>© MMXXVI · paperhound · MIT</span>
-      <span>made with <span class="heart">♥</span> for the literature-hungry</span>
-      <span>v0.5.4</span>
-    </div>
   </div>
 </footer>
 
