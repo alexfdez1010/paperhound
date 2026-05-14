@@ -522,6 +522,80 @@
   }
   .cmd-table tr:hover td{background:rgba(184,51,28,.04)}
 
+  /* ─── Why CLI section ─────────────────────────────────────── */
+  .why-grid{
+    display:grid;
+    grid-template-columns:.95fr 1.05fr;
+    gap:54px;
+    align-items:start;
+  }
+  .why-quote{
+    font-family:var(--serif);
+    font-weight:500;
+    font-variation-settings:"opsz" 96,"SOFT" 70,"WONK" 1;
+    font-size:clamp(28px, 3.6vw, 48px);
+    line-height:1.08;
+    letter-spacing:-.018em;
+    margin:0;
+    padding:6px 0 6px 24px;
+    border-left:3px solid var(--accent);
+    color:var(--ink);
+  }
+  .why-quote em{
+    color:var(--accent);
+    font-style:italic;
+    font-weight:500;
+  }
+  .why-quote .cite{
+    display:block;
+    margin-top:18px;
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:.18em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    font-weight:400;
+  }
+  .why-list{display:grid;gap:24px}
+  .why-item{
+    border-top:1px solid var(--rule);
+    padding-top:16px;
+  }
+  .why-item .why-label{
+    font-family:var(--mono);
+    font-size:11.5px;
+    letter-spacing:.2em;
+    text-transform:uppercase;
+    color:var(--accent);
+    font-weight:700;
+    margin-bottom:8px;
+  }
+  .why-item h4{
+    font-family:var(--serif);
+    font-weight:700;
+    font-variation-settings:"opsz" 72,"SOFT" 40;
+    font-size:24px;
+    line-height:1.15;
+    margin:0 0 6px;
+    letter-spacing:-.01em;
+  }
+  .why-item p{
+    font-family:var(--serif);
+    font-size:17px;
+    line-height:1.55;
+    color:var(--ink-soft);
+    margin:0;
+    max-width:56ch;
+  }
+  .why-item p code{
+    font-family:var(--mono);
+    font-size:.88em;
+    background:rgba(184,51,28,.08);
+    padding:1px 6px;
+    border-radius:3px;
+    color:var(--ink);
+  }
+
   .providers{
     display:flex;flex-wrap:wrap;gap:10px;
     margin-top:36px;
@@ -587,6 +661,7 @@
   @media (max-width: 960px){
     .install-grid{grid-template-columns:1fr}
     .skill-wrap{grid-template-columns:1fr;gap:30px}
+    .why-grid{grid-template-columns:1fr;gap:32px}
     .features{grid-template-columns:repeat(2,1fr)}
     .foot-grid{grid-template-columns:1fr 1fr}
     .sec-head{grid-template-columns:auto 1fr;gap:14px}
@@ -663,7 +738,7 @@
 <section id="install">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">§ 01</div>
+      <div class="sec-num">01 ——</div>
       <h2 class="sec-title">Install the <em>binary</em>.</h2>
       <div class="sec-kicker">~30 seconds · Python 3.10+</div>
     </div>
@@ -719,7 +794,7 @@
 <section id="skill">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">§ 02</div>
+      <div class="sec-num">02 ——</div>
       <h2 class="sec-title">Teach the <em>hound</em> to your agent.</h2>
       <div class="sec-kicker">one line · any agent</div>
     </div>
@@ -762,11 +837,78 @@
   </div>
 </section>
 
+<!-- ─── WHY CLI, NOT MCP ────────────────────────────────────── -->
+<section id="why-cli">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">03 ——</div>
+      <h2 class="sec-title">Why a <em>CLI</em>, not an MCP.</h2>
+      <div class="sec-kicker">design notes</div>
+    </div>
+
+    <div class="why-grid">
+      <blockquote class="why-quote">
+        The shell is the original agent runtime.
+        <em>Don't rebuild it in JSON.</em>
+        <span class="cite">— design principle № 1</span>
+      </blockquote>
+
+      <div class="why-list">
+        <div class="why-item">
+          <div class="why-label">i. Composition</div>
+          <h4>Unix is the integration layer.</h4>
+          <p>
+            Papers live locally — in folders, beside notes, on disk. A binary
+            slots into that world natively. Pipe <code>paperhound search --json</code>
+            into <code>jq</code>, <code>fzf</code>, <code>rg</code>, <code>tee</code>,
+            or your editor. No glue code. No bespoke server. The shell has spent
+            fifty years optimizing for exactly this.
+          </p>
+        </div>
+
+        <div class="why-item">
+          <div class="why-label">ii. Token economics</div>
+          <h4>Every MCP call pays a tax.</h4>
+          <p>
+            Each MCP tool invocation costs schema + framing + parsing tokens —
+            paid on every call, every turn. A shell invocation is <em>one</em>
+            tool call regardless of payload size, and an agent can chain a dozen
+            <code>paperhound … | grep … | head</code> operations inside a single
+            Bash turn. The token budget goes to thinking, not framing.
+          </p>
+        </div>
+
+        <div class="why-item">
+          <div class="why-label">iii. Local-first by default</div>
+          <h4>No daemon. No port. No service.</h4>
+          <p>
+            Your filesystem. Your API keys. Your network. The library lives at
+            <code>~/.paperhound/library/</code> — grep it offline, version it,
+            sync it, back it up. Nothing to keep alive. Nothing to restart when
+            it falls over.
+          </p>
+        </div>
+
+        <div class="why-item">
+          <div class="why-label">iv. Right tool, right shape</div>
+          <h4>Stateless lookup wants a binary.</h4>
+          <p>
+            MCP shines for stateful services that push events back to the agent —
+            long-running sessions, subscriptions, live data. paperhound is
+            stateless lookup and transformation. A process that answers and
+            exits is the correct shape; anything heavier is ceremony.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ─── FEATURES ─────────────────────────────────────────────── -->
 <section>
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">§ 03</div>
+      <div class="sec-num">04 ——</div>
       <h2 class="sec-title">A field <em>kit</em> for researchers.</h2>
       <div class="sec-kicker">eight providers · one query</div>
     </div>
@@ -844,7 +986,7 @@
 <section id="commands">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">§ 04</div>
+      <div class="sec-num">05 ——</div>
       <h2 class="sec-title">The <em>lexicon</em>.</h2>
       <div class="sec-kicker">paperhound &lt;cmd&gt; --help</div>
     </div>
