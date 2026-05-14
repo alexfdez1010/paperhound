@@ -593,6 +593,54 @@ section{padding:72px 0;border-bottom:1px solid var(--rule);position:relative}
 }
 .providers span::before{content:"●";color:var(--accent);font-size:10px}
 
+/* ─── Citation section ────────────────────────────────────── */
+.cite-grid{
+  display:grid;
+  grid-template-columns:.9fr 1.1fr;
+  gap:48px;
+  align-items:start;
+}
+.cite-text p{
+  font-family:var(--serif);
+  font-size:17.5px;
+  line-height:1.55;
+  color:var(--ink-soft);
+  margin:0 0 16px;
+  max-width:48ch;
+}
+.cite-text p b{color:var(--ink)}
+.cite-text .cite-meta{
+  display:flex;flex-direction:column;gap:6px;
+  margin-top:22px;
+  padding-top:16px;
+  border-top:1px solid var(--rule);
+  font-family:var(--mono);
+  font-size:12.5px;
+  letter-spacing:.02em;
+  color:var(--ink-soft);
+}
+.cite-text .cite-meta b{
+  color:var(--accent);
+  font-weight:700;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  font-size:10.5px;
+  margin-right:6px;
+}
+.cite-text .cite-meta a{text-decoration:none;border-bottom:1px solid var(--rule)}
+.cite-text .cite-meta a:hover{border-color:var(--accent)}
+
+#term-cite .term-body{
+  font-size:13px;
+  line-height:1.6;
+  white-space:pre;
+  overflow-x:auto;
+}
+
+@media (max-width:960px){
+  .cite-grid{grid-template-columns:1fr;gap:30px}
+}
+
 /* ─── Footer ──────────────────────────────────────────────── */
 footer{
   padding:46px 0 60px;
